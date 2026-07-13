@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if true; // DEV MODE: Allowing all reads and writes since no auth is implemented yet.
+    }
+  }
+}

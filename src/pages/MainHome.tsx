@@ -1,0 +1,278 @@
+import { Link } from 'react-router-dom';
+import { branches } from '../data';
+import { motion } from 'motion/react';
+import { ChevronRight, ArrowRight, Star } from 'lucide-react';
+
+export default function MainHome() {
+  const scrollToBranches = () => {
+    document.getElementById('branches')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-white selection:bg-amber-500/30">
+      
+      {/* Hero Section */}
+      <section className="relative h-screen flex flex-col items-center justify-center overflow-hidden">
+        {/* Background Image / Video */}
+        <div className="absolute inset-0 z-0 bg-neutral-900">
+          <video 
+            autoPlay 
+            loop 
+            muted 
+            playsInline
+            className="w-full h-full object-cover opacity-60 scale-105 motion-safe:animate-[pulse_10s_ease-in-out_infinite]"
+          >
+            <source src="/asado-hero.mp4" type="video/mp4" />
+          </video>
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent" />
+        </div>
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col items-center text-center px-4 max-w-4xl mx-auto mt-20">
+          <motion.h1 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.2 }}
+            className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tighter uppercase mb-6"
+          >
+            Asado Cafe
+          </motion.h1>
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+            className="text-xl md:text-3xl font-light text-neutral-300 mb-2"
+          >
+            More Than a Restaurant.
+          </motion.p>
+          <motion.p 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.5 }}
+            className="text-lg md:text-2xl font-light text-neutral-400 mb-12 font-serif italic"
+          >
+            An Experience.
+          </motion.p>
+
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 1, delay: 0.8 }}
+            onClick={scrollToBranches}
+            className="group flex items-center gap-3 bg-white text-black px-8 py-4 rounded-full font-medium uppercase tracking-wider text-sm transition-all hover:bg-neutral-200"
+          >
+            Explore Our Branches
+            <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </motion.button>
+        </div>
+      </section>
+
+      {/* Branches Showcase (Netflix Style Banners) */}
+      <section id="branches" className="py-24 bg-black">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="mb-16">
+            <h2 className="text-3xl md:text-5xl font-bold tracking-tight uppercase">Choose Your Branch</h2>
+            <p className="text-neutral-400 mt-4 text-lg">Select a destination to explore menus, events, and reservations.</p>
+          </div>
+
+          <div className="flex flex-col gap-12 md:gap-24">
+            {branches.map((branch, index) => (
+              <motion.div
+                initial={{ opacity: 0, y: 40 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.8 }}
+                key={branch.id}
+                className="relative group rounded-3xl overflow-hidden bg-neutral-900 border border-neutral-800"
+              >
+                <div className="aspect-[16/9] md:aspect-[21/9] relative w-full overflow-hidden bg-neutral-800">
+                  {/* Image placeholder */}
+                  
+                  {/* Gradients for text legibility */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent md:hidden" />
+                  
+                  {/* Content Overlay */}
+                  <div className="absolute inset-0 p-6 md:p-16 flex flex-col justify-end md:justify-center">
+                    <div className="max-w-xl">
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 backdrop-blur-md border border-white/20">
+                          <span className="text-sm">📍</span>
+                        </span>
+                        <h3 className="text-3xl md:text-5xl font-bold uppercase tracking-tight text-white">{branch.name}</h3>
+                      </div>
+                      
+                      <p className="text-neutral-300 text-lg md:text-xl font-light mb-8 max-w-md leading-relaxed">
+                        {branch.description}
+                      </p>
+
+                      {/* Dynamic Banner Message based on Branch */}
+                      {branch.slug === 'kollam' && (
+                        <div className="inline-block bg-amber-500/20 border border-amber-500/30 text-amber-300 px-4 py-2 rounded-lg text-sm font-medium mb-8">
+                          See Live Fifa 2026 Matches (Everyday)
+                        </div>
+                      )}
+                       {branch.slug === 'alappuzha' && (
+                        <div className="inline-block bg-blue-500/20 border border-blue-500/30 text-blue-300 px-4 py-2 rounded-lg text-sm font-medium mb-8">
+                          Live Music Every Saturday
+                        </div>
+                      )}
+
+                      {branch.status === 'active' ? (
+                        <Link 
+                          to={`/${branch.slug}`}
+                          className="inline-flex items-center gap-2 bg-white text-black px-6 py-3 rounded-full font-medium transition-colors hover:bg-neutral-200"
+                        >
+                          Visit {branch.name}
+                          <ArrowRight className="w-4 h-4" />
+                        </Link>
+                      ) : (
+                        <button className="inline-flex items-center gap-2 bg-neutral-800 text-neutral-300 px-6 py-3 rounded-full font-medium border border-neutral-700 cursor-default">
+                          Notify Me
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Experience Container with Fixed Background */}
+      <div className="relative">
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <div className="sticky top-0 h-screen w-full overflow-hidden bg-neutral-900">
+            <img 
+              src="/about-bg.jpg"
+              alt="About Asado"
+              className="w-full h-full object-cover opacity-70"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-black" />
+          </div>
+        </div>
+
+        <div className="relative z-10">
+          {/* About Section */}
+          <section className="min-h-screen flex items-center justify-center py-20">
+            <div className="max-w-5xl mx-auto px-4 text-center">
+              <motion.h2 
+                initial={{ opacity: 0, y: 100, filter: "blur(10px)" }}
+                whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                viewport={{ once: false, margin: "-20%" }}
+                transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                className="text-4xl md:text-6xl font-bold uppercase tracking-tight mb-8 text-white drop-shadow-lg"
+              >
+                The Asado Experience
+              </motion.h2>
+              
+              <motion.p 
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: "-20%" }}
+                transition={{ duration: 0.9, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+                className="text-xl md:text-2xl text-neutral-100 font-medium leading-relaxed drop-shadow-md"
+              >
+                Born from a passion for culinary excellence and unforgettable atmospheres, Asado Cafe is more than just a destination—it's a journey of flavors, music, and moments. Across our branches in Kerala, we bring together the best of global cuisine with the soul of local hospitality.
+              </motion.p>
+            </div>
+          </section>
+
+          {/* Gallery Preview Section */}
+          <section className="min-h-screen flex flex-col justify-center overflow-hidden relative py-20">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-16 text-center relative z-10 w-full">
+              <motion.h2 
+                initial={{ opacity: 0, y: 50, filter: "blur(10px)" }}
+                whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                viewport={{ once: false, margin: "-20%" }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                className="text-3xl md:text-5xl font-bold uppercase tracking-tight mb-4 text-white drop-shadow-lg"
+              >
+                Gallery
+              </motion.h2>
+              <motion.p
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: false, margin: "-20%" }}
+                transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+                className="text-neutral-300 text-lg max-w-2xl mx-auto drop-shadow"
+              >
+                Glimpses of the perfect ambience, crafted to make your moments special.
+              </motion.p>
+            </div>
+            
+            <motion.div 
+              initial={{ opacity: 0, y: 50 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: false, margin: "-20%" }}
+              transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="flex gap-6 px-4 md:px-8 pb-12 overflow-x-auto snap-x snap-mandatory hide-scrollbar relative z-10 w-full"
+            >
+               {[
+                 "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=3144&auto=format&fit=crop",
+                 "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?q=80&w=2864&auto=format&fit=crop",
+                 "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=3169&auto=format&fit=crop",
+                 "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?q=80&w=3270&auto=format&fit=crop",
+                 "https://images.unsplash.com/photo-1559339352-11d035aa65de?q=80&w=3174&auto=format&fit=crop"
+               ].map((src, item) => (
+                 <div 
+                   key={item} 
+                   className="snap-center shrink-0 w-[80vw] md:w-[400px] aspect-[4/5] bg-neutral-200 rounded-2xl overflow-hidden relative group shadow-xl border border-white/10"
+                 >
+                   <img src={src} alt="Gallery Preview" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                   <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors duration-500" />
+                 </div>
+               ))}
+            </motion.div>
+          </section>
+
+          {/* Testimonials Section */}
+          <section className="min-h-screen flex flex-col justify-center py-20">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center mb-16 w-full">
+              <motion.h2 
+                initial={{ opacity: 0, y: 50, filter: "blur(10px)" }}
+                whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                viewport={{ once: false, margin: "-20%" }}
+                transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                className="text-3xl md:text-5xl font-bold uppercase tracking-tight mb-4 text-white drop-shadow-lg"
+              >
+                What They Say
+              </motion.h2>
+            </div>
+
+            <div className="max-w-6xl mx-auto px-4 grid md:grid-cols-3 gap-8 w-full">
+               {[
+                 { name: "Arun K.", text: "The vibe at Asado is just unmatched. The best place in town to chill with friends and enjoy great food.", rating: 5 },
+                 { name: "Sneha V.", text: "Absolutely love the aesthetics! A very aesthetic cafe with an amazing view. The food is top-notch.", rating: 5 },
+                 { name: "Rahul M.", text: "Good food, great music, and an amazing atmosphere. Every visit to Asado is a memorable experience.", rating: 5 }
+               ].map((testimonial, i) => (
+                 <motion.div
+                   key={i}
+                   initial={{ opacity: 0, y: 50 }}
+                   whileInView={{ opacity: 1, y: 0 }}
+                   viewport={{ once: false, margin: "-20%" }}
+                   transition={{ duration: 0.8, delay: 0.1 + (i * 0.1), ease: [0.16, 1, 0.3, 1] }}
+                   className="bg-neutral-900/60 backdrop-blur-md p-8 rounded-2xl border border-white/10 shadow-2xl hover:-translate-y-1 transition-transform duration-300"
+                 >
+                   <div className="flex gap-1 text-amber-500 mb-6">
+                     {[...Array(testimonial.rating)].map((_, j) => (
+                       <Star key={j} className="w-5 h-5 fill-current" />
+                     ))}
+                   </div>
+                   <p className="text-neutral-300 mb-8 italic text-lg leading-relaxed">"{testimonial.text}"</p>
+                   <p className="font-bold uppercase tracking-wider text-sm text-white">{testimonial.name}</p>
+                 </motion.div>
+               ))}
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {/* Footer (Brand level) */}
+      <footer className="border-t border-neutral-900 py-12 text-center text-neutral-500">
+        <p className="uppercase tracking-widest text-sm">&copy; {new Date().getFullYear()} Asado Café. All rights reserved.</p>
+      </footer>
+    </div>
+  );
+}

@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "Banner": {
+      "title": "Banner",
+      "description": "A promotional banner shown on the home page",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "maxLength": 100 },
+        "subtitle": { "type": "string", "maxLength": 200 },
+        "tagText": { "type": "string", "maxLength": 50 },
+        "bgColor": { "type": "string", "maxLength": 50 },
+        "textColor": { "type": "string", "maxLength": 50 },
+        "tagBg": { "type": "string", "maxLength": 50 },
+        "tagColor": { "type": "string", "maxLength": 50 },
+        "isActive": { "type": "boolean" },
+        "branchSlug": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["title", "subtitle"]
+    },
+    "GalleryImage": {
+      "title": "Gallery Image",
+      "description": "An image displayed in the gallery",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "maxLength": 50 },
+        "branchSlug": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["url", "category", "branchSlug"]
+    },
+    "MenuItem": {
+      "title": "Menu Item",
+      "description": "A food item in the menu",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 100 },
+        "price": { "type": "string", "maxLength": 20 },
+        "category": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "maxLength": 20 },
+        "branchSlug": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name", "price", "category", "branchSlug"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "A category for menu items",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "maxLength": 50 },
+        "branchSlug": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["name", "branchSlug"]
+    }
+  },
+  "firestore": {
+    "banners/{bannerId}": {
+      "schema": { "$ref": "#/entities/Banner" },
+      "description": "Banners collection"
+    },
+    "galleryImages/{imageId}": {
+      "schema": { "$ref": "#/entities/GalleryImage" },
+      "description": "Gallery images collection"
+    },
+    "menuItems/{itemId}": {
+      "schema": { "$ref": "#/entities/MenuItem" },
+      "description": "Menu items collection"
+    },
+    "categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Menu categories collection"
+    }
+  }
+}
