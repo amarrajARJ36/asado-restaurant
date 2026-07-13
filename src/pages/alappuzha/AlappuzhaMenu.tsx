@@ -6,14 +6,26 @@ import { motion, AnimatePresence } from 'motion/react';
 
 export default function AlappuzhaMenu() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategoryName, setActiveCategoryId] = useState<string | null>(null);
+  const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
+  const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>([]);
+  const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>([]);
 
   useEffect(() => {
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
     checkIsDesktop();
     window.addEventListener('resize', checkIsDesktop);
     return () => window.removeEventListener('resize', checkIsDesktop);
+  }, []);
+
+  useEffect(() => {
+    const unsubMenu = onSnapshot(query(collection(db, 'menuItems'), where('branchSlug', '==', 'alappuzha')), (snapshot) => {
+      setAlappuzhaMenu(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    const unsubCat = onSnapshot(query(collection(db, 'categories'), where('branchSlug', '==', 'alappuzha')), (snapshot) => {
+      setAlappuzhaCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => { unsubMenu(); unsubCat(); };
   }, []);
   
   const activeCategory = alappuzhaCategories.find(c => c.name === activeCategoryName) || alappuzhaCategories.find(c => c.id === activeCategoryName);

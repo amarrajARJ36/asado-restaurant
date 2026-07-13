@@ -1,15 +1,8 @@
 const fs = require('fs');
+let code = fs.readFileSync('src/pages/alappuzha/AlappuzhaMenu.tsx', 'utf-8');
 
-if (fs.existsSync('src/pages/alappuzha/AlappuzhaMenu.tsx')) {
-  let code = fs.readFileSync('src/pages/alappuzha/AlappuzhaMenu.tsx', 'utf-8');
-
-  code = code.replace(
-    "import { alappuzhaMenu, alappuzhaCategories } from '../../data';",
-    "import { collection, onSnapshot, query, where } from 'firebase/firestore';\nimport { db, handleFirestoreError, OperationType } from '../../lib/firebase';"
-  );
-
-  const oldInit = `export default function AlappuzhaMenu() {
-  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+const badInit = `  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategoryName, setActiveCategoryId] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
@@ -19,7 +12,7 @@ if (fs.existsSync('src/pages/alappuzha/AlappuzhaMenu.tsx')) {
     return () => window.removeEventListener('resize', checkIsDesktop);
   }, []);`;
 
-  const newInit = `export default function AlappuzhaMenu() {
+const goodInit = `  const [searchQuery, setSearchQuery] = useState('');
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
   const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>([]);
@@ -42,13 +35,7 @@ if (fs.existsSync('src/pages/alappuzha/AlappuzhaMenu.tsx')) {
     return () => { unsubMenu(); unsubCat(); };
   }, []);`;
 
-  code = code.replace(oldInit, newInit);
+code = code.replace(badInit, goodInit);
+code = code.replace(/setActiveCategoryId/g, 'setActiveCategoryName');
 
-  code = code.replace(/activeCategoryId/g, 'activeCategoryName');
-  code = code.replace(/c => c\.id === activeCategoryName/g, 'c => c.name === activeCategoryName');
-  code = code.replace(/item\.category_id === activeCategoryName/g, 'item.category === activeCategoryName');
-  code = code.replace(/category_id/g, 'category');
-
-  fs.writeFileSync('src/pages/alappuzha/AlappuzhaMenu.tsx', code);
-  console.log("Updated AlappuzhaMenu.tsx");
-}
+fs.writeFileSync('src/pages/alappuzha/AlappuzhaMenu.tsx', code);
