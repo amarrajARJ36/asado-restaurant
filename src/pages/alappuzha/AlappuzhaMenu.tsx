@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
-import { alappuzhaMenu, alappuzhaCategories } from '../../data';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Search, Flame, Leaf, ArrowRight, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function AlappuzhaMenu() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [activeCategoryName, setActiveCategoryId] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
 
   useEffect(() => {
@@ -15,7 +16,7 @@ export default function AlappuzhaMenu() {
     return () => window.removeEventListener('resize', checkIsDesktop);
   }, []);
   
-  const activeCategory = alappuzhaCategories.find(c => c.id === activeCategoryId);
+  const activeCategory = alappuzhaCategories.find(c => c.name === activeCategoryName) || alappuzhaCategories.find(c => c.id === activeCategoryName);
   const isSearchActive = searchQuery.length > 0;
 
   const filteredMenu = useMemo(() => {
@@ -28,12 +29,12 @@ export default function AlappuzhaMenu() {
   }, [searchQuery, isSearchActive]);
 
   const categoryItems = useMemo(() => {
-    if (!activeCategoryId) return [];
-    return alappuzhaMenu.filter(item => item.category_id === activeCategoryId);
-  }, [activeCategoryId]);
+    if (!activeCategoryName) return [];
+    return alappuzhaMenu.filter(item => item.category === activeCategoryName);
+  }, [activeCategoryName]);
 
   useEffect(() => {
-    if (activeCategoryId) {
+    if (activeCategoryName) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
@@ -41,7 +42,7 @@ export default function AlappuzhaMenu() {
     return () => {
       document.body.style.overflow = 'auto';
     };
-  }, [activeCategoryId]);
+  }, [activeCategoryName]);
 
   const panelVariants = {
     hidden: { 
@@ -145,14 +146,14 @@ export default function AlappuzhaMenu() {
             <h2 className="text-xl font-bold text-neutral-900 mb-6">Categories</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {alappuzhaCategories.map((category, index) => {
-                const itemCount = alappuzhaMenu.filter(m => m.category_id === category.id).length;
+                const itemCount = alappuzhaMenu.filter(m => m.category === category.name).length;
                 return (
                   <motion.button
                     key={category.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    onClick={() => setActiveCategoryId(category.id)}
+                    onClick={() => setActiveCategoryName(category.name)}
                     className="bg-neutral-900 rounded-2xl shadow-sm border border-neutral-800 hover:border-teal-400 p-6 flex flex-col items-start text-left transition-colors group aspect-square justify-center relative overflow-hidden"
                   >
                     {category.image && (
@@ -186,14 +187,14 @@ export default function AlappuzhaMenu() {
       </div>
 
       <AnimatePresence>
-        {activeCategoryId && activeCategory && (
+        {activeCategoryName && activeCategory && (
           <>
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
-              onClick={() => setActiveCategoryId(null)}
+              onClick={() => setActiveCategoryName(null)}
             />
             
             <motion.div
@@ -203,7 +204,7 @@ export default function AlappuzhaMenu() {
               exit="exit"
               className="fixed inset-x-0 bottom-0 md:inset-x-auto md:right-0 md:top-0 md:bottom-0 md:w-[480px] bg-white z-50 rounded-t-3xl md:rounded-none md:rounded-l-3xl shadow-2xl flex flex-col max-h-[90vh] md:max-h-screen"
             >
-              <div className="w-full flex justify-center pt-3 pb-1 md:hidden cursor-pointer" onClick={() => setActiveCategoryId(null)}>
+              <div className="w-full flex justify-center pt-3 pb-1 md:hidden cursor-pointer" onClick={() => setActiveCategoryName(null)}>
                 <div className="w-12 h-1.5 bg-neutral-200 rounded-full" />
               </div>
 
@@ -213,7 +214,7 @@ export default function AlappuzhaMenu() {
                   <p className="text-sm text-neutral-500">{categoryItems.length} Items</p>
                 </div>
                 <button 
-                  onClick={() => setActiveCategoryId(null)}
+                  onClick={() => setActiveCategoryName(null)}
                   className="p-2 bg-neutral-100 hover:bg-neutral-200 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5 text-neutral-600" />

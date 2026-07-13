@@ -1,12 +1,15 @@
 import { useState, useMemo, useEffect } from 'react';
-import { kollamMenu, kollamCategories } from '../../data';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Search, Flame, Leaf, ArrowRight, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function KollamMenu() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategoryId, setActiveCategoryId] = useState<string | null>(null);
+  const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
+  const [kollamMenu, setKollamMenu] = useState<any[]>([]);
+  const [kollamCategories, setKollamCategories] = useState<any[]>([]);
 
   useEffect(() => {
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
@@ -14,9 +17,19 @@ export default function KollamMenu() {
     window.addEventListener('resize', checkIsDesktop);
     return () => window.removeEventListener('resize', checkIsDesktop);
   }, []);
+
+  useEffect(() => {
+    const unsubMenu = onSnapshot(query(collection(db, 'menuItems'), where('branchSlug', '==', 'kollam')), (snapshot) => {
+      setKollamMenu(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    const unsubCat = onSnapshot(query(collection(db, 'categories'), where('branchSlug', '==', 'kollam')), (snapshot) => {
+      setKollamCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => { unsubMenu(); unsubCat(); };
+  }, []);
   
   // To handle the sliding panel state
-  const activeCategory = kollamCategories.find(c => c.id === activeCategoryId);
+  const activeCategory = kollamCategories.find(c => c.name === activeCategoryName) || kollamCategories.find(c => c.id === activeCategoryName);
   const isSearchActive = searchQuery.length > 0;
 
   // If search is active, we might want to show items instead of categories
@@ -30,13 +43,13 @@ export default function KollamMenu() {
   }, [searchQuery, isSearchActive]);
 
   const categoryItems = useMemo(() => {
-    if (!activeCategoryId) return [];
-    return kollamMenu.filter(item => item.category_id === activeCategoryId);
-  }, [activeCategoryId]);
+    if (!activeCategoryName) return [];
+    return kollamMenu.filter(item => item.category === activeCategoryName);
+  }, [activeCategoryName]);
 
   // Lock body scroll when panel is open
   useEffect(() => {
-    if (activeCategoryId) {
+    if (activeCategoryName) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
@@ -44,7 +57,7 @@ export default function KollamMenu() {
     return () => {
       document.body.style.overflow = 'auto';
     };
-  }, [activeCategoryId]);
+  }, [activeCategoryName]);
 
   const panelVariants = {
     hidden: { 
@@ -149,14 +162,14 @@ export default function KollamMenu() {
             <h2 className="text-xl font-bold text-neutral-900 mb-6">Categories</h2>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {kollamCategories.map((category, index) => {
-                const itemCount = kollamMenu.filter(m => m.category_id === category.id).length;
+                const itemCount = kollamMenu.filter(m => m.category === category.name).length;
                 return (
                   <motion.button
                     key={category.id}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
-                    onClick={() => setActiveCategoryId(category.id)}
+                    onClick={() => setActiveCategoryName(category.name)}
                     className="bg-neutral-900 rounded-2xl shadow-sm border border-neutral-800 hover:border-amber-400 p-6 flex flex-col items-start text-left transition-colors group aspect-square justify-center relative overflow-hidden"
                   >
                     {category.image && (
@@ -191,7 +204,7 @@ export default function KollamMenu() {
 
       {/* Sliding Panel */}
       <AnimatePresence>
-        {activeCategoryId && activeCategory && (
+        {activeCategoryName && activeCategory && (
           <>
             {/* Backdrop */}
             <motion.div 
@@ -199,7 +212,7 @@ export default function KollamMenu() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
-              onClick={() => setActiveCategoryId(null)}
+              onClick={() => setActiveCategoryName(null)}
             />
             
             {/* Panel */}
@@ -211,7 +224,7 @@ export default function KollamMenu() {
               className="fixed inset-x-0 bottom-0 md:inset-x-auto md:right-0 md:top-0 md:bottom-0 md:w-[480px] bg-white z-50 rounded-t-3xl md:rounded-none md:rounded-l-3xl shadow-2xl flex flex-col max-h-[90vh] md:max-h-screen"
             >
               {/* Mobile handle */}
-              <div className="w-full flex justify-center pt-3 pb-1 md:hidden cursor-pointer" onClick={() => setActiveCategoryId(null)}>
+              <div className="w-full flex justify-center pt-3 pb-1 md:hidden cursor-pointer" onClick={() => setActiveCategoryName(null)}>
                 <div className="w-12 h-1.5 bg-neutral-200 rounded-full" />
               </div>
 
@@ -222,7 +235,7 @@ export default function KollamMenu() {
                   <p className="text-sm text-neutral-500">{categoryItems.length} Items</p>
                 </div>
                 <button 
-                  onClick={() => setActiveCategoryId(null)}
+                  onClick={() => setActiveCategoryName(null)}
                   className="p-2 bg-neutral-100 hover:bg-neutral-200 rounded-full transition-colors"
                 >
                   <X className="w-5 h-5 text-neutral-600" />

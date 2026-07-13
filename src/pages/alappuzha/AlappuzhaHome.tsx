@@ -353,11 +353,11 @@ export default function AlappuzhaHome() {
                   transition={{ duration: 0.3 }}
                   className="group relative aspect-square rounded-2xl overflow-hidden bg-neutral-200"
                 >
-                  <img 
-                    src={img.url} 
-                    alt={img.category}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
+                  {img.url.includes('.mp4') || img.url.includes('video') ? (
+                  <video src={img.url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" autoPlay muted loop playsInline />
+                ) : (
+                  <img src={img.url} alt={img.category} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                )}
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-6">
                     <span className="text-white font-medium uppercase tracking-wider text-xs border border-white/30 px-3 py-1 rounded-full backdrop-blur-md">
                       {img.category}
