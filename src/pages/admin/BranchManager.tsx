@@ -144,9 +144,21 @@ return (
       await uploadBytes(storageRef, file);
       const url = await getDownloadURL(storageRef);
       setNewImageUrl(url);
-    } catch (error) {
+      
+      // Immediately add to gallery
+      const id = Date.now().toString();
+      const newImg = {
+        url: url,
+        category: newImageCategory,
+        branchSlug: branchId,
+        createdAt: Date.now()
+      };
+      await setDoc(doc(db, 'galleryImages', id), newImg);
+      setNewImageUrl('');
+      alert("File uploaded successfully!");
+    } catch (error: any) {
       console.error("Error uploading file:", error);
-      alert("Failed to upload file");
+      alert("Failed to upload file. Please ensure Firebase Storage is initialized in your Firebase Console.");
     } finally {
       setUploading(false);
     }

@@ -3,6 +3,7 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firesto
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 
 export interface Banner {
+  branchSlug?: string;
   id: string;
   title: string;
   subtitle: string;
@@ -23,6 +24,7 @@ const defaultBanners: Banner[] = [
     tagText: "Today's Special",
     tagBg: 'bg-amber-200',
     tagColor: 'text-amber-900',
+    branchSlug: 'all',
   },
   {
     id: '2',
@@ -33,24 +35,35 @@ const defaultBanners: Banner[] = [
     tagText: 'Upcoming Event',
     tagBg: 'bg-blue-200',
     tagColor: 'text-blue-900',
+    branchSlug: 'all',
   }
 ];
 
-export function useBanners() {
-  const [banners, setBanners] = useState<Banner[]>(defaultBanners);
+export function useBanners(branchSlug?: string) {
+  const [banners, setBanners] = useState<Banner[]>([]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'banners'), (snapshot) => {
       const fbBanners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Banner));
-      if (fbBanners.length > 0) {
-        setBanners(fbBanners);
+      
+      let toDisplay = fbBanners;
+      
+      if (fbBanners.length === 0) {
+        toDisplay = defaultBanners;
       }
+      
+      if (branchSlug) {
+        toDisplay = toDisplay.filter(b => !b.branchSlug || b.branchSlug === 'all' || b.branchSlug === branchSlug);
+      }
+      
+      setBanners(toDisplay);
+
     }, (error) => {
       handleFirestoreError(error, OperationType.LIST, 'banners');
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [branchSlug]);
 
   const addBanner = async (banner: Banner) => {
     try {

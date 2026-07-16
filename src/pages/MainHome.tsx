@@ -96,9 +96,7 @@ export default function MainHome() {
                   <div className="absolute inset-0 p-6 md:p-16 flex flex-col justify-end md:justify-center">
                     <div className="max-w-xl">
                       <div className="flex items-center gap-3 mb-4">
-                        <span className="flex items-center justify-center w-8 h-8 rounded-full bg-white/10 backdrop-blur-md border border-white/20">
-                          <span className="text-sm">📍</span>
-                        </span>
+
                         <h3 className="text-3xl md:text-5xl font-bold uppercase tracking-tight text-white">{branch.name}</h3>
                       </div>
                       
@@ -126,11 +124,7 @@ export default function MainHome() {
                           Visit {branch.name}
                           <ArrowRight className="w-4 h-4" />
                         </Link>
-                      ) : (
-                        <button className="inline-flex items-center gap-2 bg-neutral-800 text-neutral-300 px-6 py-3 rounded-full font-medium border border-neutral-700 cursor-default">
-                          Notify Me
-                        </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 </div>

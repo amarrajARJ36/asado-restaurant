@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { Search, Flame, Leaf, ArrowRight, X } from 'lucide-react';
+import { Search, Flame, Leaf, ArrowRight, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useBanners } from '../../hooks/useBanners';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function AlappuzhaMenu() {
@@ -10,6 +11,12 @@ export default function AlappuzhaMenu() {
   const [isDesktop, setIsDesktop] = useState(true);
   const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>([]);
   const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>([]);
+  const { banners } = useBanners('alappuzha');
+  const [currentBanner, setCurrentBanner] = useState(0);
+
+  const nextBanner = () => setCurrentBanner((prev) => (prev + 1) % banners.length);
+  const prevBanner = () => setCurrentBanner((prev) => (prev - 1 + banners.length) % banners.length);
+
 
   useEffect(() => {
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);

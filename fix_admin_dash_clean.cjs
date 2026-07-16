@@ -1,4 +1,6 @@
-import { useState } from 'react';
+const fs = require('fs');
+
+let code = `import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { branches } from '../../data';
 import { Users, TrendingUp, DollarSign, Store, Plus, Trash2 } from 'lucide-react';
@@ -138,7 +140,7 @@ export default function AdminDashboard() {
 
         <div className="grid md:grid-cols-2 gap-6">
           {banners.map((banner) => (
-            <div key={banner.id} className={`relative p-6 rounded-2xl border ${banner.bgColor} ${banner.bgColor === 'bg-amber-50' ? 'border-amber-200' : 'border-neutral-200'} shadow-sm flex flex-col justify-center items-center text-center`}>
+            <div key={banner.id} className={\`relative p-6 rounded-2xl border \${banner.bgColor} \${banner.bgColor === 'bg-amber-50' ? 'border-amber-200' : 'border-neutral-200'} shadow-sm flex flex-col justify-center items-center text-center\`}>
               <button 
                 onClick={() => removeBanner(banner.id)}
                 className="absolute top-4 right-4 p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
@@ -146,11 +148,11 @@ export default function AdminDashboard() {
                 <Trash2 className="w-4 h-4" />
               </button>
               
-              <span className={`inline-block px-3 py-1 ${banner.tagBg} ${banner.tagColor} rounded-full text-xs font-bold uppercase tracking-wider mb-3`}>
+              <span className={\`inline-block px-3 py-1 \${banner.tagBg} \${banner.tagColor} rounded-full text-xs font-bold uppercase tracking-wider mb-3\`}>
                 {banner.tagText} • {banner.branchSlug === "all" || !banner.branchSlug ? "All Branches" : banner.branchSlug}
               </span>
-              <h3 className={`text-xl font-bold mb-1 ${banner.textColor}`}>{banner.title}</h3>
-              <p className={`text-sm opacity-80 ${banner.textColor}`}>{banner.subtitle}</p>
+              <h3 className={\`text-xl font-bold mb-1 \${banner.textColor}\`}>{banner.title}</h3>
+              <p className={\`text-sm opacity-80 \${banner.textColor}\`}>{banner.subtitle}</p>
             </div>
           ))}
           
@@ -167,7 +169,7 @@ export default function AdminDashboard() {
       <div className="grid md:grid-cols-3 gap-6">
         {branches.map(branch => (
           <Link 
-            to={`/admin/branch/${branch.slug}`} 
+            to={\`/admin/branch/\${branch.slug}\`} 
             key={branch.id}
             className="group bg-white rounded-2xl border border-neutral-200 shadow-sm overflow-hidden hover:border-amber-500 transition-colors"
           >
@@ -196,3 +198,5 @@ export default function AdminDashboard() {
     </div>
   );
 }
+`
+fs.writeFileSync('src/pages/admin/AdminDashboard.tsx', code);
