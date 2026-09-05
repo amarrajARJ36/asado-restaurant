@@ -197,7 +197,7 @@ export default function KollamCruise() {
               { 
                 title: "Traditional Kerala Meal", 
                 desc: "Enjoy authentic local flavours served on a banana leaf.",
-                img: "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?q=80&w=2000&auto=format&fit=crop"
+                img: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Sadhya_DSW.jpg/1280px-Sadhya_DSW.jpg"
               }
             ].map((addon, i) => (
               <div key={i} className="group relative overflow-hidden bg-black aspect-[4/3] flex flex-col justify-end">

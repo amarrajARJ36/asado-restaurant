@@ -7,7 +7,7 @@ import { useBanners } from '../../hooks/useBanners';
 
 export default function KollamHome() {
   const branch = branches.find(b => b.slug === 'kollam');
-  const { banners } = useBanners();
+  const { banners } = useBanners('kollam');
   const [currentBanner, setCurrentBanner] = useState(0);
 
   useEffect(() => {
@@ -33,15 +33,14 @@ export default function KollamHome() {
       {/* Hero Section */}
       <section className="relative h-[80vh] md:h-screen flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0 bg-neutral-900">
-          <video 
-            autoPlay 
-            loop 
-            muted 
-            playsInline
-            className="w-full h-full object-cover opacity-100 brightness-110 scale-105 motion-safe:animate-[pulse_10s_ease-in-out_infinite]"
-          >
-            <source src="/kollam-hero.mp4" type="video/mp4" />
-          </video>
+          <motion.img 
+            initial={{ scale: 1.1, opacity: 0 }}
+            animate={{ scale: 1.05, opacity: 1 }}
+            transition={{ duration: 1.5, ease: "easeOut" }}
+            src="/asado-hero-image.jpeg"
+            alt="Kollam Asado"
+            className="w-full h-full object-cover opacity-100 brightness-110 motion-safe:animate-[pulse_10s_ease-in-out_infinite]"
+          />
           <div className="absolute inset-0 bg-black/10" />
         </div>
         

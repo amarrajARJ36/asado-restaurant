@@ -86,11 +86,22 @@ export default function MainHome() {
                 className="relative group rounded-3xl overflow-hidden bg-neutral-900 border border-neutral-800"
               >
                 <div className="aspect-[16/9] md:aspect-[21/9] relative w-full overflow-hidden bg-neutral-800">
-                  {/* Image placeholder */}
+                  {/* Conditional Background Image */}
+                  <img 
+                    src={
+                      branch.slug === 'kollam' 
+                        ? '/asado-sign.jpeg' 
+                        : branch.slug === 'alappuzha' 
+                          ? '/asado-sign 2.jpeg' 
+                          : '/asado-sign 3.jpeg'
+                    } 
+                    alt={branch.name} 
+                    className="absolute inset-0 w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity duration-700" 
+                  />
                   
                   {/* Gradients for text legibility */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent md:hidden" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent md:hidden" />
                   
                   {/* Content Overlay */}
                   <div className="absolute inset-0 p-6 md:p-16 flex flex-col justify-end md:justify-center">
@@ -154,7 +165,7 @@ export default function MainHome() {
               <motion.h2 
                 initial={{ opacity: 0, y: 100, filter: "blur(10px)" }}
                 whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                viewport={{ once: false, margin: "-20%" }}
+                viewport={{ once: true, margin: "-20%" }}
                 transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
                 className="text-4xl md:text-6xl font-bold uppercase tracking-tight mb-8 text-white drop-shadow-lg"
               >
@@ -164,7 +175,7 @@ export default function MainHome() {
               <motion.p 
                 initial={{ opacity: 0, y: 50 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: false, margin: "-20%" }}
+                viewport={{ once: true, margin: "-20%" }}
                 transition={{ duration: 0.9, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
                 className="text-xl md:text-2xl text-neutral-100 font-medium leading-relaxed drop-shadow-md"
               >
@@ -179,7 +190,7 @@ export default function MainHome() {
               <motion.h2 
                 initial={{ opacity: 0, y: 50, filter: "blur(10px)" }}
                 whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                viewport={{ once: false, margin: "-20%" }}
+                viewport={{ once: true, margin: "-20%" }}
                 transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 className="text-3xl md:text-5xl font-bold uppercase tracking-tight mb-4 text-white drop-shadow-lg"
               >
@@ -188,7 +199,7 @@ export default function MainHome() {
               <motion.p
                 initial={{ opacity: 0, y: 30 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: false, margin: "-20%" }}
+                viewport={{ once: true, margin: "-20%" }}
                 transition={{ duration: 0.8, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
                 className="text-neutral-300 text-lg max-w-2xl mx-auto drop-shadow"
               >
@@ -199,16 +210,16 @@ export default function MainHome() {
             <motion.div 
               initial={{ opacity: 0, y: 50 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: false, margin: "-20%" }}
+              viewport={{ once: true, margin: "-20%" }}
               transition={{ duration: 0.8, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
               className="flex gap-6 px-4 md:px-8 pb-12 overflow-x-auto snap-x snap-mandatory hide-scrollbar relative z-10 w-full"
             >
                {[
-                 "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=3144&auto=format&fit=crop",
-                 "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?q=80&w=2864&auto=format&fit=crop",
-                 "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=3169&auto=format&fit=crop",
-                 "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?q=80&w=3270&auto=format&fit=crop",
-                 "https://images.unsplash.com/photo-1559339352-11d035aa65de?q=80&w=3174&auto=format&fit=crop"
+                 "/H1.jpeg",
+                 "/H2.jpeg",
+                 "/H3.jpeg",
+                 "/H4.jpeg",
+                 "/H5.jpeg"
                ].map((src, item) => (
                  <div 
                    key={item} 
@@ -227,7 +238,7 @@ export default function MainHome() {
               <motion.h2 
                 initial={{ opacity: 0, y: 50, filter: "blur(10px)" }}
                 whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                viewport={{ once: false, margin: "-20%" }}
+                viewport={{ once: true, margin: "-20%" }}
                 transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 className="text-3xl md:text-5xl font-bold uppercase tracking-tight mb-4 text-white drop-shadow-lg"
               >
@@ -245,7 +256,7 @@ export default function MainHome() {
                    key={i}
                    initial={{ opacity: 0, y: 50 }}
                    whileInView={{ opacity: 1, y: 0 }}
-                   viewport={{ once: false, margin: "-20%" }}
+                   viewport={{ once: true, margin: "-20%" }}
                    transition={{ duration: 0.8, delay: 0.1 + (i * 0.1), ease: [0.16, 1, 0.3, 1] }}
                    className="bg-neutral-900/60 backdrop-blur-md p-8 rounded-2xl border border-white/10 shadow-2xl hover:-translate-y-1 transition-transform duration-300"
                  >

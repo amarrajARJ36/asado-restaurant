@@ -112,12 +112,15 @@ export default function AlappuzhaHome() {
       {/* 1. Hero Section */}
       <section className="relative h-[90vh] md:h-screen flex items-center justify-center overflow-hidden">
         <div className="absolute inset-0 z-0 bg-slate-200">
-          <motion.img 
+          <motion.video 
             initial={{ scale: 1.1, opacity: 0 }}
             animate={{ scale: 1.05, opacity: 0.9 }}
             transition={{ duration: 1.5, ease: "easeOut" }}
-            src="https://images.unsplash.com/photo-1502635385003-ee1e6a1a742d?q=80&w=3132&auto=format&fit=crop"
-            alt="Alappuzha Backwaters"
+            autoPlay
+            muted
+            loop
+            playsInline
+            src="/hero alappuzha.mp4"
             className="w-full h-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-slate-50 via-white/40 to-transparent" />
