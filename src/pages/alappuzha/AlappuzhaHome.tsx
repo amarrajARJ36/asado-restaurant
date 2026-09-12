@@ -20,31 +20,31 @@ const HOUSEBOAT_RECOMMENDATIONS = {
   couple: {
     title: '1-Bedroom Premium Houseboat',
     desc: 'Intimate, private, and luxurious. Perfect for a romantic getaway with a private deck and candlelight dinner options.',
-    img: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=2000&auto=format&fit=crop',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/1/13/Kerala_Houseboat_%28191490747%29.jpeg',
     tags: ['Private Chef', 'Jacuzzi Option', 'Decorations']
   },
   family: {
     title: '2-3 Bedroom Family Houseboat',
     desc: 'Spacious decks, safe for children, and multiple rooms. Enjoy quality family time cruising the backwaters.',
-    img: 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/8/83/KumarakomHouseBoat.jpg',
     tags: ['Family Lounge', 'Kid Friendly Meals', 'AC Bedrooms']
   },
   friends: {
     title: '3-4 Bedroom Leisure Houseboat',
     desc: 'Large upper deck for lounging, great music system, and plenty of space to relax and catch up with friends.',
-    img: 'https://images.unsplash.com/photo-1475503572774-15a45e5d60b9?q=80&w=2000&auto=format&fit=crop',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/3/38/A_Houseboat_in_Backwaters_of_Kerala.jpg',
     tags: ['Upper Deck', 'Music System', 'Group Dining']
   },
   corporate: {
     title: 'Luxury Conference Houseboat',
     desc: 'Equipped for team offsites with large seating areas, premium catering, and presentation facilities if needed.',
-    img: 'https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?q=80&w=2000&auto=format&fit=crop',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/e/e4/Alappuzha_Boat_Beauty_W.jpg',
     tags: ['Large Capacity', 'Premium Catering', 'Lounge Area']
   },
   celebration: {
     title: 'Party & Celebration Houseboat',
     desc: 'Custom decorated boats with ample space for cake cutting, parties, and creating unforgettable memories.',
-    img: 'https://images.unsplash.com/photo-1519741497674-611481863552?q=80&w=2000&auto=format&fit=crop',
+    img: 'https://upload.wikimedia.org/wikipedia/commons/e/ec/House_Boat_View_DSW.jpg',
     tags: ['Custom Decor', 'Event Space', 'Special Menu']
   }
 };
@@ -121,9 +121,9 @@ export default function AlappuzhaHome() {
             loop
             playsInline
             src="/hero alappuzha.mp4"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover brightness-110"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-50 via-white/40 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-50 via-white/20 to-transparent" />
         </div>
         
         <div className="relative z-10 text-center px-4 max-w-5xl mx-auto flex flex-col items-center">
@@ -237,7 +237,6 @@ export default function AlappuzhaHome() {
                   alt={recommendedBoat.title}
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t md:bg-gradient-to-r from-slate-50 to-transparent opacity-80 md:opacity-100" />
               </div>
               <div className="md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-center z-10">
                 <h4 className="text-3xl font-serif text-slate-900 mb-4">{recommendedBoat.title}</h4>

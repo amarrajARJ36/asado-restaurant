@@ -20,6 +20,9 @@ export default function BranchManager() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  const menuFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetMenuId, setTargetMenuId] = useState<string | null>(null);
+  const [uploadingMenuId, setUploadingMenuId] = useState<string | null>(null);
   const [newMenuName, setNewMenuName] = useState('');
   const [newMenuPrice, setNewMenuPrice] = useState('');
   const [newMenuCategory, setNewMenuCategory] = useState('');
@@ -84,6 +87,39 @@ return (
       await deleteDoc(doc(db, 'galleryImages', id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `galleryImages/${id}`);
+    }
+  };
+
+  const triggerMenuUpload = (menuId: string) => {
+    setTargetMenuId(menuId);
+    if (menuFileInputRef.current) menuFileInputRef.current.click();
+  };
+
+  const handleMenuImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const menuId = targetMenuId;
+    if (!file || !branchId || !menuId) return;
+
+    setUploadingMenuId(menuId);
+    try {
+      storage.maxUploadRetryTime = 15000;
+      const storageRef = ref(storage, `menu/${branchId}/${Date.now()}_${file.name}`);
+      const uploadTask = uploadBytes(storageRef, file);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Upload timed out. Check Storage rules or initialization.")), 15000);
+      });
+      
+      await Promise.race([uploadTask, timeoutPromise]);
+      const url = await getDownloadURL(storageRef);
+      
+      await setDoc(doc(db, 'menuItems', menuId), { imageUrl: url }, { merge: true });
+    } catch (error) {
+      console.error(error);
+      alert("Image upload failed: " + (error as Error).message);
+    } finally {
+      setUploadingMenuId(null);
+      setTargetMenuId(null);
+      if (menuFileInputRef.current) menuFileInputRef.current.value = '';
     }
   };
 
@@ -261,6 +297,7 @@ return (
               </div>
 
               <div className="border border-neutral-200 rounded-lg overflow-hidden">
+                <input type="file" accept="image/*" ref={menuFileInputRef} onChange={handleMenuImageUpload} className="hidden" />
                 <table className="w-full text-left text-sm">
                   <thead className="bg-neutral-50 border-b border-neutral-200">
                     <tr>
@@ -276,13 +313,25 @@ return (
                         <td className="px-4 py-3 font-medium">{item.name}</td>
                         <td className="px-4 py-3">{item.price}</td>
                         <td className="px-4 py-3">{item.category}</td>
+                        <td className="px-4 py-3 text-center">
+                          {item.imageUrl ? (
+                            <div className="flex flex-col items-center gap-2">
+                              <img src={item.imageUrl} alt="Menu" className="w-12 h-12 object-cover rounded shadow-sm" />
+                              <button onClick={() => triggerMenuUpload(item.id)} className="text-xs text-amber-600 hover:underline">Change</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => triggerMenuUpload(item.id)} disabled={uploadingMenuId === item.id} className="text-xs text-neutral-500 hover:text-amber-600 border border-neutral-300 rounded px-2 py-1">
+                              {uploadingMenuId === item.id ? '...' : 'Upload'}
+                            </button>
+                          )}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           <button onClick={() => handleRemoveMenu(item.id)} className="text-red-600 hover:underline">Delete</button>
                         </td>
                       </tr>
                     ))}
                     {menuItems.length === 0 && (
-                      <tr><td colSpan={4} className="px-4 py-8 text-center text-neutral-500">No menu items found.</td></tr>
+                      <tr><td colSpan={5} className="px-4 py-8 text-center text-neutral-500">No menu items found.</td></tr>
                     )}
                   </tbody>
                 </table>

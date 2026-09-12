@@ -138,8 +138,8 @@ export default function KollamCruise() {
           <div className="grid lg:grid-cols-2 gap-16 items-center">
             <div className="relative aspect-[3/4] overflow-hidden rounded-t-full border-8 border-emerald-900/50">
               <img 
-                src="https://images.unsplash.com/photo-1534430480872-3498384e54e6?q=80&w=3270&auto=format&fit=crop" 
-                alt="Scenic Backwaters" 
+                src="/cruise-experience.jpeg" 
+                alt="Asado Cruise Experience" 
                 className="absolute inset-0 w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-black/10" />
@@ -229,9 +229,9 @@ export default function KollamCruise() {
             {[
               { title: "Boats", h: "h-96", img: "https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?q=80&w=3132&auto=format&fit=crop" },
               { title: "Backwaters", h: "h-64", img: "https://images.unsplash.com/photo-1590050752117-238cb0fb12b1?q=80&w=3270&auto=format&fit=crop" },
-              { title: "Sunset", h: "h-80", img: "https://images.unsplash.com/photo-1544485501-8395ea3f45f7?q=80&w=3270&auto=format&fit=crop" },
-              { title: "Guests", h: "h-72", img: "https://images.unsplash.com/photo-1534430480872-3498384e54e6?q=80&w=3270&auto=format&fit=crop" },
-              { title: "Meals", h: "h-96", img: "https://images.unsplash.com/photo-1627308595229-7830f5c927b8?q=80&w=3174&auto=format&fit=crop" },
+              { title: "Sunset", h: "h-80", img: "https://upload.wikimedia.org/wikipedia/commons/9/96/Kerala_Houseboat_View.JPG" },
+              { title: "Guests", h: "h-72", img: "https://upload.wikimedia.org/wikipedia/commons/d/df/Kerala_Launch.JPG" },
+              { title: "Meals", h: "h-96", img: "https://upload.wikimedia.org/wikipedia/commons/thumb/9/95/Sadhya_DSW.jpg/1280px-Sadhya_DSW.jpg" },
               { title: "Morning Cruise", h: "h-64", img: "https://images.unsplash.com/photo-1593693411515-c20261bcad6e?q=80&w=3269&auto=format&fit=crop" }
             ].map((item, i) => (
               <div key={i} className={`relative break-inside-avoid overflow-hidden group ${item.h} bg-emerald-900`}>

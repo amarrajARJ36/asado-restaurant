@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { Search, Flame, Leaf, ArrowRight, X } from 'lucide-react';
+import { Search, Flame, Leaf, ArrowRight, X, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function KollamMenu() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDish, setSelectedDish] = useState<any | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
   const [kollamMenu, setKollamMenu] = useState<any[]>([]);
@@ -125,11 +126,22 @@ export default function KollamMenu() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     key={item.id} 
-                    className="bg-white rounded-2xl shadow-sm border border-neutral-100 p-5 flex flex-col"
+                    className={`bg-white rounded-2xl shadow-sm border border-neutral-100 p-5 flex flex-col ${item.imageUrl ? 'cursor-pointer hover:border-amber-200 transition-colors' : ''}`}
+                    onClick={() => item.imageUrl && setSelectedDish(item)}
                   >
                     <div className="flex justify-between items-start gap-4 mb-2">
                       <h3 className="font-bold text-neutral-900 leading-tight">
                         {item.name}
+                        {item.imageUrl && (
+                          <span className="inline-block ml-2 align-middle" title="View Image">
+                            <Camera className="w-4 h-4 text-amber-600" />
+                          </span>
+                        )}
+                        {item.imageUrl && (
+                          <span className="inline-block ml-2 align-middle" title="View Image">
+                            <Camera className="w-4 h-4 text-amber-600" />
+                          </span>
+                        )}
                         {item.isVeg && (
                           <span className="inline-block ml-2 align-middle" title="Vegetarian">
                             <Leaf className="w-3 h-3 text-green-600" />
@@ -250,7 +262,8 @@ export default function KollamMenu() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     key={item.id} 
-                    className="bg-neutral-50 rounded-2xl p-4 border border-neutral-100 flex gap-4"
+                    className={`bg-neutral-50 rounded-2xl p-4 border border-neutral-100 flex gap-4 ${item.imageUrl ? 'cursor-pointer hover:border-amber-200 transition-colors bg-white shadow-sm' : ''}`}
+                    onClick={() => item.imageUrl && setSelectedDish(item)}
                   >
                     <div className="flex-1">
                       <div className="flex justify-between items-start gap-4 mb-1">
@@ -295,6 +308,65 @@ export default function KollamMenu() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {selectedDish && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedDish(null)}
+            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-md w-full relative"
+            >
+              <button 
+                onClick={() => setSelectedDish(null)}
+                className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 z-10 backdrop-blur-md transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              
+              <div className="aspect-[4/3] w-full bg-neutral-100 relative">
+                <img src={selectedDish.imageUrl} alt={selectedDish.name} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="absolute bottom-4 left-6 right-6">
+                  <div className="flex justify-between items-end gap-4">
+                    <h3 className="text-2xl font-bold text-white leading-tight drop-shadow-md">{selectedDish.name}</h3>
+                    <span className="font-bold text-amber-400 text-xl drop-shadow-md">
+                      {typeof selectedDish.price === 'string' && selectedDish.price.includes('/') 
+                        ? selectedDish.price.split('/').map((p: string) => `₹${p}`).join('/') 
+                        : `₹${selectedDish.price}`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="p-6 bg-white">
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {selectedDish.isVeg && (
+                    <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">
+                      <Leaf className="w-3 h-3" /> Vegetarian
+                    </span>
+                  )}
+                  {selectedDish.isChefRecommendation && (
+                    <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">
+                      <Flame className="w-3 h-3" /> Chef's Special
+                    </span>
+                  )}
+                </div>
+                {selectedDish.description && (
+                  <p className="text-neutral-600 leading-relaxed">{selectedDish.description}</p>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
