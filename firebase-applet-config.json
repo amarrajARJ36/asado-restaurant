@@ -1,11 +1,12 @@
 {
-  "projectId": "gen-lang-client-0879109916",
-  "appId": "1:1040260748560:web:7fcb93cba68a75ddeec195",
-  "apiKey": "AIzaSyBz7jXf-8_Wlv5zBg9bDXBU_JazF1wCbPY",
-  "authDomain": "gen-lang-client-0879109916.firebaseapp.com",
+  "projectId": "asado-website",
+  "appId": "1:928112476222:web:2652c8f5622de99811516f",
+  "apiKey": "AIzaSyAUio8YL9vyKyTgK2VsqmeyPjp6qz4M2yQ",
+  "authDomain": "asado-website.firebaseapp.com",
   "firestoreDatabaseId": "ai-studio-asado-293daebd-897a-49bc-bc6d-f2d3e66dc381",
-  "storageBucket": "gen-lang-client-0879109916.firebasestorage.app",
-  "messagingSenderId": "1040260748560",
+  "storageBucket": "asado-website.firebasestorage.app",
+  "messagingSenderId": "928112476222",
   "measurementId": "",
-  "oAuthClientId": "1040260748560-r5jt6aavk98l2bs79a2pm4rmt1ou2lqc.apps.googleusercontent.com"
+  "oAuthClientId": "928112476222-e6b1iuji8365arjfkf5httafk77hpi1l.apps.googleusercontent.com",
+  "recaptchaSiteKey": ""
 }
