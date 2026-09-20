@@ -2,11 +2,11 @@ import React from "react";
 import { useParams } from 'react-router-dom';
 import { branches } from '../../data';
 import { useState, useEffect } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2 } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { compressImage } from '../../lib/imageCompressor';
 import { useRef } from 'react';
 
 export default function BranchManager() {
@@ -21,11 +21,14 @@ export default function BranchManager() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const menuFileInputRef = useRef<HTMLInputElement>(null);
+  const newMenuFileInputRef = useRef<HTMLInputElement>(null);
   const [targetMenuId, setTargetMenuId] = useState<string | null>(null);
   const [uploadingMenuId, setUploadingMenuId] = useState<string | null>(null);
   const [newMenuName, setNewMenuName] = useState('');
   const [newMenuPrice, setNewMenuPrice] = useState('');
   const [newMenuCategory, setNewMenuCategory] = useState('');
+  const [newMenuImage, setNewMenuImage] = useState('');
+  const [compressingNewMenuImage, setCompressingNewMenuImage] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
   const [newCategoryName, setNewCategoryName] = useState('');
 
@@ -102,24 +105,41 @@ return (
 
     setUploadingMenuId(menuId);
     try {
-      storage.maxUploadRetryTime = 15000;
-      const storageRef = ref(storage, `menu/${branchId}/${Date.now()}_${file.name}`);
-      const uploadTask = uploadBytes(storageRef, file);
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Upload timed out. Check Storage rules or initialization.")), 15000);
-      });
+      if (!file.type.startsWith('image/')) {
+        alert("Please select a valid image file (JPG, PNG, WEBP).");
+        return;
+      }
+      // Compress image client-side to a crisp ~40-70KB Data URL (100% free direct to Firestore!)
+      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.75 });
       
-      await Promise.race([uploadTask, timeoutPromise]);
-      const url = await getDownloadURL(storageRef);
-      
-      await setDoc(doc(db, 'menuItems', menuId), { imageUrl: url }, { merge: true });
+      await setDoc(doc(db, 'menuItems', menuId), { imageUrl: compressedDataUrl }, { merge: true });
     } catch (error) {
       console.error(error);
-      alert("Image upload failed: " + (error as Error).message);
+      alert("Image processing failed: " + (error as Error).message);
     } finally {
       setUploadingMenuId(null);
       setTargetMenuId(null);
       if (menuFileInputRef.current) menuFileInputRef.current.value = '';
+    }
+  };
+
+  const handleNewMenuImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      alert("Please select a valid image file (JPG, PNG, WEBP).");
+      return;
+    }
+    setCompressingNewMenuImage(true);
+    try {
+      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.75 });
+      setNewMenuImage(compressedDataUrl);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to compress image: " + (error as Error).message);
+    } finally {
+      setCompressingNewMenuImage(false);
+      if (newMenuFileInputRef.current) newMenuFileInputRef.current.value = '';
     }
   };
 
@@ -131,11 +151,13 @@ return (
         name: newMenuName,
         price: newMenuPrice,
         category: newMenuCategory,
+        imageUrl: newMenuImage || null,
         status: 'active',
         branchSlug: branchId
       });
       setNewMenuName('');
       setNewMenuPrice('');
+      setNewMenuImage('');
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'menuItems');
     }
@@ -176,36 +198,30 @@ return (
     if (!file || !branchId) return;
     setUploading(true);
     try {
-      storage.maxUploadRetryTime = 15000; // fail fast after 15 seconds if storage is not set up
-      const storageRef = ref(storage, `gallery/${branchId}/${Date.now()}_${file.name}`);
-      
-      const uploadTask = uploadBytes(storageRef, file);
-      
-      // Add a simple timeout promise race just in case
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Upload timed out. Please ensure Firebase Storage is initialized in your Firebase Console.")), 15000);
-      });
-      
-      await Promise.race([uploadTask, timeoutPromise]);
-      const url = await getDownloadURL(storageRef);
-      setNewImageUrl(url);
-      
-      // Immediately add to gallery
+      if (file.type.startsWith('video/')) {
+        alert("Video files cannot be stored directly in free database documents due to size constraints. You can paste any direct video URL (e.g. from YouTube, Supabase Storage, or Cloudinary) into the URL box!");
+        return;
+      }
+
+      // In-browser compression: scale & compress image client-side to ~60-100KB WebP
+      const compressedDataUrl = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.78 });
+
+      // Immediately add to gallery in Firestore - 100% free on Spark plan!
       const id = Date.now().toString();
       const newImg = {
-        url: url,
+        url: compressedDataUrl,
         category: newImageCategory,
         branchSlug: branchId,
         createdAt: Date.now()
       };
       await setDoc(doc(db, 'galleryImages', id), newImg);
       setNewImageUrl('');
-      alert("File uploaded successfully!");
     } catch (error: any) {
       console.error("Error uploading file:", error);
-      alert("Failed to upload file. Please ensure Firebase Storage is initialized in your Firebase Console.");
+      alert("Failed to process image: " + (error?.message || "Unknown error"));
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -278,21 +294,42 @@ return (
               <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 mb-8 flex flex-wrap gap-4 items-end">
                 <div className="flex-1 min-w-[200px]">
                   <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Item Name</label>
-                  <input type="text" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none" />
+                  <input type="text" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} placeholder="e.g. Asado Beef Steak" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
                 </div>
-                <div className="w-32">
+                <div className="w-28">
                   <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Price</label>
-                  <input type="text" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none" />
+                  <input type="text" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} placeholder="e.g. 260" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
                 </div>
-                <div className="w-48">
+                <div className="w-44">
                   <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Category</label>
-                  <select value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none">
+                  <select value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500">
                     <option value="">Select...</option>
                     {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
+                <div className="w-40">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Photo (Optional)</label>
+                  <input type="file" accept="image/*" ref={newMenuFileInputRef} onChange={handleNewMenuImageSelect} className="hidden" />
+                  {newMenuImage ? (
+                    <div className="flex items-center gap-2 h-[38px] px-2 bg-white border border-neutral-300 rounded-lg">
+                      <img src={newMenuImage} alt="preview" className="w-6 h-6 rounded object-cover border border-neutral-200" />
+                      <span className="text-xs text-green-700 font-medium truncate flex-1">Ready</span>
+                      <button type="button" onClick={() => setNewMenuImage('')} className="text-xs text-red-500 hover:text-red-700 font-bold px-1">✕</button>
+                    </div>
+                  ) : (
+                    <button 
+                      type="button" 
+                      onClick={() => newMenuFileInputRef.current?.click()} 
+                      disabled={compressingNewMenuImage}
+                      className="w-full h-[38px] px-3 bg-white border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-50 flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <Camera className="w-3.5 h-3.5 text-neutral-500" />
+                      {compressingNewMenuImage ? 'Compressing...' : 'Add Photo'}
+                    </button>
+                  )}
+                </div>
                 <button onClick={handleAddMenu} className="bg-neutral-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-black transition-colors flex items-center gap-2 text-sm h-[38px]">
-                  <Plus className="w-4 h-4" /> Add
+                  <Plus className="w-4 h-4" /> Add Item
                 </button>
               </div>
 
@@ -304,24 +341,36 @@ return (
                       <th className="px-4 py-3 font-semibold text-neutral-600">Item</th>
                       <th className="px-4 py-3 font-semibold text-neutral-600">Price</th>
                       <th className="px-4 py-3 font-semibold text-neutral-600">Category</th>
+                      <th className="px-4 py-3 text-center font-semibold text-neutral-600">Photo</th>
                       <th className="px-4 py-3 text-right font-semibold text-neutral-600">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
                     {menuItems.map(item => (
-                      <tr key={item.id}>
+                      <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
                         <td className="px-4 py-3 font-medium">{item.name}</td>
                         <td className="px-4 py-3">{item.price}</td>
                         <td className="px-4 py-3">{item.category}</td>
                         <td className="px-4 py-3 text-center">
                           {item.imageUrl ? (
-                            <div className="flex flex-col items-center gap-2">
-                              <img src={item.imageUrl} alt="Menu" className="w-12 h-12 object-cover rounded shadow-sm" />
-                              <button onClick={() => triggerMenuUpload(item.id)} className="text-xs text-amber-600 hover:underline">Change</button>
+                            <div className="flex items-center justify-center gap-2">
+                              <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
+                              <button 
+                                onClick={() => triggerMenuUpload(item.id)} 
+                                disabled={uploadingMenuId === item.id}
+                                className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                              >
+                                {uploadingMenuId === item.id ? '...' : 'Change'}
+                              </button>
                             </div>
                           ) : (
-                            <button onClick={() => triggerMenuUpload(item.id)} disabled={uploadingMenuId === item.id} className="text-xs text-neutral-500 hover:text-amber-600 border border-neutral-300 rounded px-2 py-1">
-                              {uploadingMenuId === item.id ? '...' : 'Upload'}
+                            <button 
+                              onClick={() => triggerMenuUpload(item.id)} 
+                              disabled={uploadingMenuId === item.id} 
+                              className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
+                            >
+                              <Upload className="w-3 h-3" />
+                              {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
                             </button>
                           )}
                         </td>

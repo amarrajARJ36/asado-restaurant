@@ -133,13 +133,8 @@ export default function KollamMenu() {
                       <h3 className="font-bold text-neutral-900 leading-tight">
                         {item.name}
                         {item.imageUrl && (
-                          <span className="inline-block ml-2 align-middle" title="View Image">
-                            <Camera className="w-4 h-4 text-amber-600" />
-                          </span>
-                        )}
-                        {item.imageUrl && (
-                          <span className="inline-block ml-2 align-middle" title="View Image">
-                            <Camera className="w-4 h-4 text-amber-600" />
+                          <span className="inline-flex ml-2 items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full align-middle">
+                            <Camera className="w-2.5 h-2.5" /> Photo
                           </span>
                         )}
                         {item.isVeg && (
@@ -155,7 +150,7 @@ export default function KollamMenu() {
                       </h3>
                       <span className="font-bold text-amber-700 shrink-0">
                         {typeof item.price === 'string' && item.price.includes('/') 
-                          ? item.price.split('/').map(p => `₹${p}`).join('/') 
+                          ? item.price.split('/').map((p: string) => `₹${p}`).join('/') 
                           : `₹${item.price}`}
                       </span>
                     </div>
@@ -262,22 +257,27 @@ export default function KollamMenu() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     key={item.id} 
-                    className={`bg-neutral-50 rounded-2xl p-4 border border-neutral-100 flex gap-4 ${item.imageUrl ? 'cursor-pointer hover:border-amber-200 transition-colors bg-white shadow-sm' : ''}`}
+                    className={`bg-neutral-50 rounded-2xl p-4 border border-neutral-100 flex gap-4 items-center ${item.imageUrl ? 'cursor-pointer hover:border-amber-300 hover:shadow-md transition-all bg-white' : ''}`}
                     onClick={() => item.imageUrl && setSelectedDish(item)}
                   >
                     <div className="flex-1">
                       <div className="flex justify-between items-start gap-4 mb-1">
-                        <h3 className="font-bold text-neutral-900">
+                        <h3 className="font-bold text-neutral-900 flex items-center gap-1.5 flex-wrap">
                           {item.name}
                           {item.isVeg && (
-                            <span className="inline-block ml-1 align-middle" title="Vegetarian">
-                              <Leaf className="w-3 h-3 text-green-600" />
+                            <span className="inline-block align-middle" title="Vegetarian">
+                              <Leaf className="w-3.5 h-3.5 text-green-600" />
+                            </span>
+                          )}
+                          {item.imageUrl && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                              <Camera className="w-2.5 h-2.5" /> Tap for photo
                             </span>
                           )}
                         </h3>
                         <span className="font-bold text-amber-700 shrink-0">
                           {typeof item.price === 'string' && item.price.includes('/') 
-                            ? item.price.split('/').map(p => `₹${p}`).join('/') 
+                            ? item.price.split('/').map((p: string) => `₹${p}`).join('/') 
                             : `₹${item.price}`}
                         </span>
                       </div>
@@ -294,6 +294,12 @@ export default function KollamMenu() {
                         </p>
                       )}
                     </div>
+
+                    {item.imageUrl && (
+                      <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative group">
+                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      </div>
+                    )}
                   </motion.div>
                 ))}
                 
