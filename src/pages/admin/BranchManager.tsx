@@ -2,12 +2,13 @@ import React from "react";
 import { useParams } from 'react-router-dom';
 import { branches } from '../../data';
 import { useState, useEffect } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { compressImage } from '../../lib/imageCompressor';
 import { useRef } from 'react';
+import DietarySymbol from '../../components/DietarySymbol';
 
 export default function BranchManager() {
   const { branchId } = useParams();
@@ -27,6 +28,9 @@ export default function BranchManager() {
   const [newMenuName, setNewMenuName] = useState('');
   const [newMenuPrice, setNewMenuPrice] = useState('');
   const [newMenuCategory, setNewMenuCategory] = useState('');
+  const [newMenuDescription, setNewMenuDescription] = useState('');
+  const [newMenuIsVeg, setNewMenuIsVeg] = useState(false);
+  const [newMenuIsChefRec, setNewMenuIsChefRec] = useState(false);
   const [newMenuImage, setNewMenuImage] = useState('');
   const [compressingNewMenuImage, setCompressingNewMenuImage] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
@@ -151,15 +155,48 @@ return (
         name: newMenuName,
         price: newMenuPrice,
         category: newMenuCategory,
+        description: newMenuDescription.trim(),
+        isVeg: newMenuIsVeg,
+        isChefRecommendation: newMenuIsChefRec,
         imageUrl: newMenuImage || null,
         status: 'active',
         branchSlug: branchId
       });
       setNewMenuName('');
       setNewMenuPrice('');
+      setNewMenuDescription('');
+      setNewMenuIsVeg(false);
+      setNewMenuIsChefRec(false);
       setNewMenuImage('');
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'menuItems');
+    }
+  };
+
+  const toggleItemVeg = async (item: any) => {
+    try {
+      await setDoc(doc(db, 'menuItems', item.id), { isVeg: !item.isVeg }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
+    }
+  };
+
+  const toggleItemChefRec = async (item: any) => {
+    try {
+      await setDoc(doc(db, 'menuItems', item.id), { isChefRecommendation: !item.isChefRecommendation }, { merge: true });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
+    }
+  };
+
+  const handleEditDescription = async (item: any) => {
+    const newDesc = prompt(`Edit description for "${item.name}":`, item.description || "");
+    if (newDesc !== null) {
+      try {
+        await setDoc(doc(db, 'menuItems', item.id), { description: newDesc.trim() }, { merge: true });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
+      }
     }
   };
 
@@ -289,48 +326,96 @@ return (
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Menu Items</h2>
               </div>
-              <p className="text-neutral-500 mb-6">Manage the digital menu for {branch.name}.</p>
+              <p className="text-neutral-500 mb-6">Manage the digital menu for {branch.name}. Dishes automatically sync with dietary badges, descriptions, and compressed photos.</p>
               
-              <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 mb-8 flex flex-wrap gap-4 items-end">
-                <div className="flex-1 min-w-[200px]">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Item Name</label>
-                  <input type="text" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} placeholder="e.g. Asado Beef Steak" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
+              <div className="bg-neutral-50 p-5 rounded-xl border border-neutral-200 mb-8 space-y-4">
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="flex-1 min-w-[200px]">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Item Name</label>
+                    <input type="text" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} placeholder="e.g. Asado Beef Steak" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
+                  </div>
+                  <div className="w-28">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Price</label>
+                    <input type="text" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} placeholder="e.g. 260" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
+                  </div>
+                  <div className="w-44">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Category</label>
+                    <select value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                      <option value="">Select...</option>
+                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="w-40">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Photo (Optional)</label>
+                    <input type="file" accept="image/*" ref={newMenuFileInputRef} onChange={handleNewMenuImageSelect} className="hidden" />
+                    {newMenuImage ? (
+                      <div className="flex items-center gap-2 h-[38px] px-2 bg-white border border-neutral-300 rounded-lg">
+                        <img src={newMenuImage} alt="preview" className="w-6 h-6 rounded object-cover border border-neutral-200" />
+                        <span className="text-xs text-green-700 font-medium truncate flex-1">Ready</span>
+                        <button type="button" onClick={() => setNewMenuImage('')} className="text-xs text-red-500 hover:text-red-700 font-bold px-1">✕</button>
+                      </div>
+                    ) : (
+                      <button 
+                        type="button" 
+                        onClick={() => newMenuFileInputRef.current?.click()} 
+                        disabled={compressingNewMenuImage}
+                        className="w-full h-[38px] px-3 bg-white border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-50 flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        <Camera className="w-3.5 h-3.5 text-neutral-500" />
+                        {compressingNewMenuImage ? 'Compressing...' : 'Add Photo'}
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="w-28">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Price</label>
-                  <input type="text" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} placeholder="e.g. 260" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
-                </div>
-                <div className="w-44">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Category</label>
-                  <select value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500">
-                    <option value="">Select...</option>
-                    {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div className="w-40">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Photo (Optional)</label>
-                  <input type="file" accept="image/*" ref={newMenuFileInputRef} onChange={handleNewMenuImageSelect} className="hidden" />
-                  {newMenuImage ? (
-                    <div className="flex items-center gap-2 h-[38px] px-2 bg-white border border-neutral-300 rounded-lg">
-                      <img src={newMenuImage} alt="preview" className="w-6 h-6 rounded object-cover border border-neutral-200" />
-                      <span className="text-xs text-green-700 font-medium truncate flex-1">Ready</span>
-                      <button type="button" onClick={() => setNewMenuImage('')} className="text-xs text-red-500 hover:text-red-700 font-bold px-1">✕</button>
+
+                <div className="flex flex-wrap gap-4 items-end pt-2 border-t border-neutral-200">
+                  <div className="flex-1 min-w-[240px]">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Description (Optional)</label>
+                    <input 
+                      type="text" 
+                      value={newMenuDescription} 
+                      onChange={e => setNewMenuDescription(e.target.value)} 
+                      placeholder="e.g. Juicy grilled steak served with signature pepper sauce" 
+                      className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Dietary</label>
+                      <button
+                        type="button"
+                        onClick={() => setNewMenuIsVeg(!newMenuIsVeg)}
+                        className={`h-[38px] px-3.5 rounded-lg border text-xs font-semibold flex items-center gap-2 transition-all ${
+                          newMenuIsVeg ? 'bg-green-50 border-green-300 text-green-700 shadow-sm' : 'bg-red-50 border-red-200 text-red-700 shadow-sm'
+                        }`}
+                        title="Click to toggle Veg / Non-Veg"
+                      >
+                        <DietarySymbol isVeg={newMenuIsVeg} size="sm" />
+                        <span>{newMenuIsVeg ? 'Vegetarian' : 'Non-Veg'}</span>
+                      </button>
                     </div>
-                  ) : (
-                    <button 
-                      type="button" 
-                      onClick={() => newMenuFileInputRef.current?.click()} 
-                      disabled={compressingNewMenuImage}
-                      className="w-full h-[38px] px-3 bg-white border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-50 flex items-center justify-center gap-1.5 transition-colors"
-                    >
-                      <Camera className="w-3.5 h-3.5 text-neutral-500" />
-                      {compressingNewMenuImage ? 'Compressing...' : 'Add Photo'}
-                    </button>
-                  )}
+
+                    <div>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Highlight</label>
+                      <button
+                        type="button"
+                        onClick={() => setNewMenuIsChefRec(!newMenuIsChefRec)}
+                        className={`h-[38px] px-3 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                          newMenuIsChefRec ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm' : 'bg-white border-neutral-300 text-neutral-600 hover:bg-neutral-50'
+                        }`}
+                        title="Click to toggle Chef's Recommendation"
+                      >
+                        <Flame className={`w-3.5 h-3.5 ${newMenuIsChefRec ? 'text-amber-600 fill-amber-500' : 'text-neutral-400'}`} />
+                        <span>Chef Rec</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <button onClick={handleAddMenu} className="bg-neutral-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-black transition-colors flex items-center gap-2 text-sm h-[38px] ml-auto">
+                    <Plus className="w-4 h-4" /> Add Item
+                  </button>
                 </div>
-                <button onClick={handleAddMenu} className="bg-neutral-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-black transition-colors flex items-center gap-2 text-sm h-[38px]">
-                  <Plus className="w-4 h-4" /> Add Item
-                </button>
               </div>
 
               <div className="border border-neutral-200 rounded-lg overflow-hidden">
@@ -338,7 +423,8 @@ return (
                 <table className="w-full text-left text-sm">
                   <thead className="bg-neutral-50 border-b border-neutral-200">
                     <tr>
-                      <th className="px-4 py-3 font-semibold text-neutral-600">Item</th>
+                      <th className="px-4 py-3 font-semibold text-neutral-600">Item & Description</th>
+                      <th className="px-4 py-3 font-semibold text-neutral-600">Type</th>
                       <th className="px-4 py-3 font-semibold text-neutral-600">Price</th>
                       <th className="px-4 py-3 font-semibold text-neutral-600">Category</th>
                       <th className="px-4 py-3 text-center font-semibold text-neutral-600">Photo</th>
@@ -348,9 +434,49 @@ return (
                   <tbody className="divide-y divide-neutral-200">
                     {menuItems.map(item => (
                       <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
-                        <td className="px-4 py-3 font-medium">{item.name}</td>
-                        <td className="px-4 py-3">{item.price}</td>
-                        <td className="px-4 py-3">{item.category}</td>
+                        <td className="px-4 py-3 max-w-[280px]">
+                          <div className="flex items-start gap-2">
+                            <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                            <div className="min-w-0">
+                              <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
+                                <span>{item.name}</span>
+                                {item.isChefRecommendation && (
+                                  <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                    <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                  </span>
+                                )}
+                              </div>
+                              {item.description ? (
+                                <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
+                                  <span>{item.description}</span>
+                                  <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
+                                    <Edit3 className="w-3 h-3" />
+                                  </button>
+                                </p>
+                              ) : (
+                                <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
+                                  <Plus className="w-2.5 h-2.5" /> Add description
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            onClick={() => toggleItemVeg(item)}
+                            title="Click to switch Veg / Non-Veg"
+                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
+                              item.isVeg 
+                                ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                                : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                            }`}
+                          >
+                            <DietarySymbol isVeg={item.isVeg} size="sm" />
+                            <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
+                          </button>
+                        </td>
+                        <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
+                        <td className="px-4 py-3 text-neutral-600">{item.category}</td>
                         <td className="px-4 py-3 text-center">
                           {item.imageUrl ? (
                             <div className="flex items-center justify-center gap-2">
@@ -380,7 +506,7 @@ return (
                       </tr>
                     ))}
                     {menuItems.length === 0 && (
-                      <tr><td colSpan={5} className="px-4 py-8 text-center text-neutral-500">No menu items found.</td></tr>
+                      <tr><td colSpan={6} className="px-4 py-8 text-center text-neutral-500">No menu items found.</td></tr>
                     )}
                   </tbody>
                 </table>

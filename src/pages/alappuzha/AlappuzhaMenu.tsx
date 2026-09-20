@@ -1,23 +1,25 @@
 import { useState, useMemo, useEffect } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { Search, Flame, Leaf, ArrowRight, X, ChevronLeft, ChevronRight, Camera } from 'lucide-react';
+import { Search, Flame, ArrowRight, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useBanners } from '../../hooks/useBanners';
 import { motion, AnimatePresence } from 'motion/react';
+import { alappuzhaMenu as staticAlappuzhaMenu, alappuzhaCategories as staticAlappuzhaCategories } from '../../data';
+import DietarySymbol from '../../components/DietarySymbol';
+import DishDetailModal from '../../components/DishDetailModal';
 
 export default function AlappuzhaMenu() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<any | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
-  const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>([]);
-  const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>([]);
+  const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>(staticAlappuzhaMenu);
+  const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>(staticAlappuzhaCategories);
   const { banners } = useBanners('alappuzha');
   const [currentBanner, setCurrentBanner] = useState(0);
 
   const nextBanner = () => setCurrentBanner((prev) => (prev + 1) % banners.length);
   const prevBanner = () => setCurrentBanner((prev) => (prev - 1 + banners.length) % banners.length);
-
 
   useEffect(() => {
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
@@ -28,10 +30,23 @@ export default function AlappuzhaMenu() {
 
   useEffect(() => {
     const unsubMenu = onSnapshot(query(collection(db, 'menuItems'), where('branchSlug', '==', 'alappuzha')), (snapshot) => {
-      setAlappuzhaMenu(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      if (!snapshot.empty) {
+        const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAlappuzhaMenu(prev => {
+          const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
+          const merged = staticAlappuzhaMenu.map(staticItem => dbItemMap.get(staticItem.id) || staticItem);
+          const existingIds = new Set(staticAlappuzhaMenu.map(i => i.id));
+          dbItems.forEach((item: any) => {
+            if (!existingIds.has(item.id)) merged.push(item);
+          });
+          return merged;
+        });
+      }
     });
     const unsubCat = onSnapshot(query(collection(db, 'categories'), where('branchSlug', '==', 'alappuzha')), (snapshot) => {
-      setAlappuzhaCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      if (!snapshot.empty) {
+        setAlappuzhaCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      }
     });
     return () => { unsubMenu(); unsubCat(); };
   }, []);
@@ -123,47 +138,53 @@ export default function AlappuzhaMenu() {
               </div>
             ) : (
               <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {filteredMenu.map((item, index) => (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    key={item.id} 
-                    className={`bg-white rounded-2xl shadow-sm border border-neutral-100 p-5 flex flex-col ${item.imageUrl ? 'cursor-pointer hover:border-teal-300 hover:shadow-md transition-all' : ''}`}
-                    onClick={() => item.imageUrl && setSelectedDish(item)}
-                  >
-                    <div className="flex justify-between items-start gap-4 mb-2">
-                      <h3 className="font-bold text-neutral-900 leading-tight">
-                        {item.name}
-                        {item.imageUrl && (
-                          <span className="inline-flex ml-2 items-center gap-1 text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded-full align-middle">
-                            <Camera className="w-2.5 h-2.5" /> Photo
-                          </span>
-                        )}
-                        {item.isVeg && (
-                          <span className="inline-block ml-2 align-middle" title="Vegetarian">
-                            <Leaf className="w-3 h-3 text-green-600" />
-                          </span>
-                        )}
+                {filteredMenu.map((item, index) => {
+                  const hasImg = Boolean(item.imageUrl || item.image);
+                  const imgUrl = item.imageUrl || item.image;
+                  return (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      key={item.id} 
+                      className="bg-white rounded-2xl shadow-sm border border-neutral-100 p-4 hover:border-teal-300 hover:shadow-md transition-all cursor-pointer flex gap-3.5 items-center group"
+                      onClick={() => setSelectedDish(item)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-2 mb-1">
+                          <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                          <h3 className="font-bold text-neutral-900 leading-snug group-hover:text-teal-700 transition-colors">
+                            {item.name}
+                          </h3>
+                        </div>
+
                         {item.isChefRecommendation && (
-                          <span className="inline-flex ml-2 align-middle items-center gap-1 bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                          <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
                             <Flame className="w-3 h-3" /> Chef Rec
                           </span>
                         )}
-                      </h3>
-                      <span className="font-bold text-teal-700 shrink-0">
-                        {typeof item.price === 'string' && item.price.includes('/') 
-                          ? item.price.split('/').map((p: string) => `₹${p}`).join('/') 
-                          : `₹${item.price}`}
-                      </span>
-                    </div>
-                    {item.description && (
-                      <p className="text-neutral-500 text-xs leading-relaxed flex-1">
-                        {item.description}
-                      </p>
-                    )}
-                  </motion.div>
-                ))}
+
+                        {item.description && (
+                          <p className="text-neutral-500 text-xs leading-relaxed line-clamp-2 mb-2">
+                            {item.description}
+                          </p>
+                        )}
+
+                        <span className="font-bold text-teal-700 text-sm block">
+                          {typeof item.price === 'string' && item.price.includes('/') 
+                            ? item.price.split('/').map((p: string) => `₹${p}`).join('/') 
+                            : `₹${item.price}`}
+                        </span>
+                      </div>
+
+                      {hasImg && (
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
+                          <img src={imgUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -248,57 +269,53 @@ export default function AlappuzhaMenu() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-4">
-                {categoryItems.map((item, index) => (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    key={item.id} 
-                    className={`bg-neutral-50 rounded-2xl p-4 border border-neutral-100 flex gap-4 items-center ${item.imageUrl ? 'cursor-pointer hover:border-teal-300 hover:shadow-md transition-all bg-white' : ''}`}
-                    onClick={() => item.imageUrl && setSelectedDish(item)}
-                  >
-                    <div className="flex-1">
-                      <div className="flex justify-between items-start gap-4 mb-1">
-                        <h3 className="font-bold text-neutral-900 flex items-center gap-1.5 flex-wrap">
-                          {item.name}
-                          {item.isVeg && (
-                            <span className="inline-block align-middle" title="Vegetarian">
-                              <Leaf className="w-3.5 h-3.5 text-green-600" />
-                            </span>
-                          )}
-                          {item.imageUrl && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-1.5 py-0.5 rounded-full">
-                              <Camera className="w-2.5 h-2.5" /> Tap for photo
-                            </span>
-                          )}
-                        </h3>
-                        <span className="font-bold text-teal-700 shrink-0">
+                {categoryItems.map((item, index) => {
+                  const hasImg = Boolean(item.imageUrl || item.image);
+                  const imgUrl = item.imageUrl || item.image;
+                  return (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      key={item.id} 
+                      className="bg-neutral-50 hover:bg-white rounded-2xl p-4 border border-neutral-100 hover:border-teal-300 hover:shadow-md transition-all cursor-pointer flex gap-4 items-center group"
+                      onClick={() => setSelectedDish(item)}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start gap-2 mb-1">
+                          <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                          <h3 className="font-bold text-neutral-900 leading-snug group-hover:text-teal-700 transition-colors">
+                            {item.name}
+                          </h3>
+                        </div>
+
+                        {item.isChefRecommendation && (
+                          <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                            <Flame className="w-3 h-3" /> Chef Rec
+                          </span>
+                        )}
+
+                        {item.description && (
+                          <p className="text-neutral-500 text-xs leading-relaxed line-clamp-2 mb-2">
+                            {item.description}
+                          </p>
+                        )}
+
+                        <span className="font-bold text-teal-700 text-sm block">
                           {typeof item.price === 'string' && item.price.includes('/') 
                             ? item.price.split('/').map((p: string) => `₹${p}`).join('/') 
                             : `₹${item.price}`}
                         </span>
                       </div>
-                      
-                      {item.isChefRecommendation && (
-                        <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-2">
-                          <Flame className="w-3 h-3" /> Chef Rec
-                        </span>
-                      )}
-                      
-                      {item.description && (
-                        <p className="text-neutral-500 text-xs leading-relaxed">
-                          {item.description}
-                        </p>
-                      )}
-                    </div>
 
-                    {item.imageUrl && (
-                      <div className="w-16 h-16 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative group">
-                        <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
+                      {hasImg && (
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
+                          <img src={imgUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
                 
                 {categoryItems.length === 0 && (
                   <div className="text-center py-12 text-neutral-400">
@@ -311,66 +328,12 @@ export default function AlappuzhaMenu() {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {selectedDish && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setSelectedDish(null)}
-            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-3xl overflow-hidden shadow-2xl max-w-md w-full relative"
-            >
-              <button 
-                onClick={() => setSelectedDish(null)}
-                className="absolute top-4 right-4 bg-black/50 hover:bg-black/80 text-white rounded-full p-2 z-10 backdrop-blur-md transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-              
-              <div className="aspect-[4/3] w-full bg-neutral-100 relative">
-                <img src={selectedDish.imageUrl} alt={selectedDish.name} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                <div className="absolute bottom-4 left-6 right-6">
-                  <div className="flex justify-between items-end gap-4">
-                    <h3 className="text-2xl font-bold text-white leading-tight drop-shadow-md">{selectedDish.name}</h3>
-                    <span className="font-bold text-teal-300 text-xl drop-shadow-md">
-                      {typeof selectedDish.price === 'string' && selectedDish.price.includes('/') 
-                        ? selectedDish.price.split('/').map((p: string) => `₹${p}`).join('/') 
-                        : `₹${selectedDish.price}`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="p-6 bg-white">
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {selectedDish.isVeg && (
-                    <span className="inline-flex items-center gap-1 bg-green-50 text-green-700 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">
-                      <Leaf className="w-3 h-3" /> Vegetarian
-                    </span>
-                  )}
-                  {selectedDish.isChefRecommendation && (
-                    <span className="inline-flex items-center gap-1 bg-teal-50 text-teal-700 px-2 py-1 rounded text-xs font-bold uppercase tracking-wider">
-                      <Flame className="w-3 h-3" /> Chef's Special
-                    </span>
-                  )}
-                </div>
-                {selectedDish.description && (
-                  <p className="text-neutral-600 leading-relaxed">{selectedDish.description}</p>
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
+      {/* Dish Detail Popup Modal */}
+      <DishDetailModal
+        dish={selectedDish}
+        onClose={() => setSelectedDish(null)}
+        theme="teal"
+      />
     </div>
   );
 }
