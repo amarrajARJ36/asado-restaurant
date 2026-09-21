@@ -157,7 +157,7 @@ export default function KollamCelebrations() {
               subtitle: "Perfect for cake cutting",
               price: "FREE",
               features: ["Reserved Table", "Celebration Space", "Music"],
-              badge: "Minimum Food Purchase Required",
+              badge: "WITH FOOD ORDER",
               isPremium: false
             },
             {

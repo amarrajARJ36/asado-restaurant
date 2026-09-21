@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "ASADO - The River Restaurant & Dining",
+  "description": "Luxury waterfront and river dining experience at Kollam, Alappuzha, and Varkala with signature grilled specialties, boat cruise dining, and premium celebration spaces.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

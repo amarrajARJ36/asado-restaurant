@@ -10,9 +10,10 @@ export interface Branch {
 
 export interface Category {
   id: string;
-  branch_id: string;
+  branch_id?: string;
   name: string;
   image?: string;
+  imageUrl?: string;
 }
 
 export interface FoodItem {

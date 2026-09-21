@@ -1,13 +1,13 @@
 import React from "react";
 import { useParams } from 'react-router-dom';
-import { branches } from '../../data';
-import { useState, useEffect } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3 } from 'lucide-react';
+import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
+import { useState, useEffect, useRef } from 'react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { compressImage } from '../../lib/imageCompressor';
-import { useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
 
 export default function BranchManager() {
@@ -20,9 +20,13 @@ export default function BranchManager() {
   const [newImageUrl, setNewImageUrl] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [menuItems, setMenuItems] = useState<any[]>([]);
+  
+  const baseItems = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
+  const baseCategories = branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
+  const [menuItems, setMenuItems] = useState<any[]>(baseItems);
   const menuFileInputRef = useRef<HTMLInputElement>(null);
   const newMenuFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
   const [targetMenuId, setTargetMenuId] = useState<string | null>(null);
   const [uploadingMenuId, setUploadingMenuId] = useState<string | null>(null);
   const [newMenuName, setNewMenuName] = useState('');
@@ -33,8 +37,39 @@ export default function BranchManager() {
   const [newMenuIsChefRec, setNewMenuIsChefRec] = useState(false);
   const [newMenuImage, setNewMenuImage] = useState('');
   const [compressingNewMenuImage, setCompressingNewMenuImage] = useState(false);
-  const [categories, setCategories] = useState<any[]>([]);
+  
+  // Edit Menu Item Modal State
+  const [editingItem, setEditingItem] = useState<{
+    id: string;
+    name: string;
+    price: string;
+    category: string;
+    description: string;
+    isVeg: boolean;
+    isChefRecommendation: boolean;
+    imageUrl?: string;
+  } | null>(null);
+  const [compressingEditImage, setCompressingEditImage] = useState(false);
+
+  const DEFAULT_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1200&auto=format&fit=crop";
+
+  const [categories, setCategories] = useState<any[]>(baseCategories);
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryImage, setNewCategoryImage] = useState('');
+  const [compressingNewCatImage, setCompressingNewCatImage] = useState(false);
+  const newCatFileInputRef = useRef<HTMLInputElement>(null);
+  const catFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetCatId, setTargetCatId] = useState<string | null>(null);
+  const [uploadingCatId, setUploadingCatId] = useState<string | null>(null);
+
+  // Edit Category Modal State
+  const [editingCategory, setEditingCategory] = useState<{
+    id: string;
+    name: string;
+    imageUrl?: string;
+  } | null>(null);
+  const [compressingEditCatImage, setCompressingEditCatImage] = useState(false);
+  const editCatFileInputRef = useRef<HTMLInputElement>(null);
 
   const [newImageCategory, setNewImageCategory] = useState('Food');
 
@@ -52,15 +87,37 @@ export default function BranchManager() {
 
     const qMenu = query(collection(db, 'menuItems'), where('branchSlug', '==', branchId));
     const unsubMenu = onSnapshot(qMenu, (snapshot) => {
-      setMenuItems(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (dbItems.length === 0) {
+        setMenuItems(baseItems);
+      } else {
+        const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
+        const merged = baseItems.map((staticItem: any) => dbItemMap.get(staticItem.id) || staticItem);
+        const existingIds = new Set(baseItems.map((i: any) => i.id));
+        dbItems.forEach((item: any) => {
+          if (!existingIds.has(item.id)) merged.push(item);
+        });
+        setMenuItems(merged);
+      }
     });
+
     const qCat = query(collection(db, 'categories'), where('branchSlug', '==', branchId));
     const unsubCat = onSnapshot(qCat, (snapshot) => {
-      setCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (dbCats.length === 0) {
+        setCategories(baseCategories);
+      } else {
+        const dbCatMap = new Map(dbCats.map((c: any) => [c.id, c]));
+        const merged = baseCategories.map((sc: any) => dbCatMap.get(sc.id) || sc);
+        const existingIds = new Set(baseCategories.map((c: any) => c.id));
+        dbCats.forEach((c: any) => {
+          if (!existingIds.has(c.id)) merged.push(c);
+        });
+        setCategories(merged);
+      }
     });
   
-return (
-) => { unsubscribe(); unsubMenu(); unsubCat(); };
+    return () => { unsubscribe(); unsubMenu(); unsubCat(); };
   }, [branchId]);
 
   if (!branch) return <div>Branch not found</div>;
@@ -200,31 +257,206 @@ return (
     }
   };
 
+  const handleStartEdit = (item: any) => {
+    setEditingItem({
+      id: item.id,
+      name: item.name || '',
+      price: typeof item.price === 'number' ? String(item.price) : (item.price || ''),
+      category: item.category || '',
+      description: item.description || '',
+      isVeg: Boolean(item.isVeg),
+      isChefRecommendation: Boolean(item.isChefRecommendation),
+      imageUrl: item.imageUrl || item.image || ''
+    });
+  };
+
+  const handleEditImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingItem) return;
+    setCompressingEditImage(true);
+    try {
+      const compressedBase64 = await compressImage(file, { maxWidth: 800, quality: 0.7 });
+      setEditingItem(prev => prev ? { ...prev, imageUrl: compressedBase64 } : null);
+    } catch (err) {
+      console.error("Failed to compress edit image", err);
+      alert("Could not process image. Please try another image.");
+    } finally {
+      setCompressingEditImage(false);
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return;
+    if (!editingItem.name.trim()) {
+      alert("Item name cannot be empty.");
+      return;
+    }
+    try {
+      const updatedData: any = {
+        name: editingItem.name.trim(),
+        price: editingItem.price.trim(),
+        category: editingItem.category.trim(),
+        description: editingItem.description.trim(),
+        isVeg: Boolean(editingItem.isVeg),
+        isChefRecommendation: Boolean(editingItem.isChefRecommendation),
+        imageUrl: editingItem.imageUrl || null,
+        branchSlug: branchId,
+        status: 'active',
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'menuItems', editingItem.id), updatedData, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === editingItem.id ? { ...m, ...updatedData } : m));
+      setEditingItem(null);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `menuItems/${editingItem.id}`);
+    }
+  };
+
   const handleRemoveMenu = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this menu item?')) return;
     try {
       await deleteDoc(doc(db, 'menuItems', id));
+      setMenuItems(prev => prev.filter(m => m.id !== id));
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, 'menuItems');
+      handleFirestoreError(e, OperationType.DELETE, `menuItems/${id}`);
+    }
+  };
+
+  const handleNewCatImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCompressingNewCatImage(true);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      setNewCategoryImage(compressed);
+    } catch (err) {
+      console.error("Failed to compress category image", err);
+      alert("Could not process image.");
+    } finally {
+      setCompressingNewCatImage(false);
+      if (newCatFileInputRef.current) newCatFileInputRef.current.value = '';
     }
   };
 
   const handleAddCategory = async () => {
-    if (!newCategoryName) return;
-    const id = Date.now().toString();
+    if (!newCategoryName.trim() || !branchId) return;
+    const id = `cat_${Date.now()}`;
+    const catData: any = {
+      id,
+      name: newCategoryName.trim(),
+      branchSlug: branchId,
+      image: newCategoryImage || null,
+      imageUrl: newCategoryImage || null,
+      createdAt: Date.now()
+    };
     try {
-      await setDoc(doc(db, 'categories', id), {
-        name: newCategoryName,
-        branchSlug: branchId
-      });
+      await setDoc(doc(db, 'categories', id), catData);
+      setCategories(prev => [...prev, catData]);
       setNewCategoryName('');
+      setNewCategoryImage('');
     } catch (e) {
       handleFirestoreError(e, OperationType.CREATE, 'categories');
     }
   };
 
+  const triggerCategoryPhotoUpload = (catId: string) => {
+    setTargetCatId(catId);
+    setTimeout(() => {
+      catFileInputRef.current?.click();
+    }, 50);
+  };
+
+  const handleCategoryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetCatId || !branchId) return;
+    const catToUpdate = categories.find(c => c.id === targetCatId);
+    if (!catToUpdate) return;
+
+    setUploadingCatId(targetCatId);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      const updateData = {
+        name: catToUpdate.name,
+        branchSlug: branchId,
+        image: compressed,
+        imageUrl: compressed,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'categories', targetCatId), updateData, { merge: true });
+      setCategories(prev => prev.map(c => c.id === targetCatId ? { ...c, ...updateData } : c));
+    } catch (err) {
+      console.error("Failed to process category photo", err);
+      alert("Could not upload category photo.");
+    } finally {
+      setUploadingCatId(null);
+      setTargetCatId(null);
+      if (catFileInputRef.current) catFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveCategoryPhoto = async (cat: any) => {
+    if (!confirm(`Remove background photo from category "${cat.name}"? It will revert to the default culinary background.`)) return;
+    try {
+      const updateData = {
+        image: null,
+        imageUrl: null,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'categories', cat.id), updateData, { merge: true });
+      setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, image: undefined, imageUrl: undefined } : c));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `categories/${cat.id}`);
+    }
+  };
+
+  const handleStartEditCategory = (cat: any) => {
+    setEditingCategory({
+      id: cat.id,
+      name: cat.name,
+      imageUrl: cat.imageUrl || cat.image || ''
+    });
+  };
+
+  const handleEditCatImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingCategory) return;
+    setCompressingEditCatImage(true);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      setEditingCategory(prev => prev ? { ...prev, imageUrl: compressed } : null);
+    } catch (err) {
+      console.error("Failed to compress edit category image", err);
+      alert("Could not process image.");
+    } finally {
+      setCompressingEditCatImage(false);
+      if (editCatFileInputRef.current) editCatFileInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveEditCategory = async () => {
+    if (!editingCategory || !editingCategory.name.trim() || !branchId) return;
+    try {
+      const updateData = {
+        name: editingCategory.name.trim(),
+        branchSlug: branchId,
+        image: editingCategory.imageUrl || null,
+        imageUrl: editingCategory.imageUrl || null,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'categories', editingCategory.id), updateData, { merge: true });
+      setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, ...updateData } : c));
+      setEditingCategory(null);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `categories/${editingCategory.id}`);
+    }
+  };
+
   const handleRemoveCategory = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this category? Dishes in this category may be affected.')) return;
     try {
       await deleteDoc(doc(db, 'categories', id));
+      setCategories(prev => prev.filter(c => c.id !== id));
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, 'categories');
     }
@@ -500,8 +732,25 @@ return (
                             </button>
                           )}
                         </td>
-                        <td className="px-4 py-3 text-right">
-                          <button onClick={() => handleRemoveMenu(item.id)} className="text-red-600 hover:underline">Delete</button>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2">
+                            <button 
+                              onClick={() => handleStartEdit(item)} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                              title="Edit item details"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                              <span>Edit</span>
+                            </button>
+                            <button 
+                              onClick={() => handleRemoveMenu(item.id)} 
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                              title="Delete item"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -595,34 +844,214 @@ return (
             </div>
           )}
 
-                    {activeTab === 'categories' && (
+          {activeTab === 'categories' && (
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold">Categories</h2>
-              </div>
-              <p className="text-neutral-500 mb-6">Manage menu categories.</p>
-              <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 mb-8 flex gap-4 items-end">
-                <div className="flex-1">
-                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Category Name</label>
-                  <input type="text" value={newCategoryName} onChange={e => setNewCategoryName(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none" />
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-bold">Categories & Background Photos</h2>
+                  <p className="text-neutral-500 text-sm">Add or edit categories and assign custom background pictures to category cards on the menu.</p>
                 </div>
-                <button onClick={handleAddCategory} className="bg-neutral-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-black transition-colors flex items-center gap-2 text-sm h-[38px]">
-                  <Plus className="w-4 h-4" /> Add
-                </button>
               </div>
-              <div className="border border-neutral-200 rounded-lg overflow-hidden">
+
+              {/* Hidden file inputs for category photo upload */}
+              <input 
+                type="file" 
+                ref={catFileInputRef} 
+                accept="image/*" 
+                onChange={handleCategoryPhotoUpload} 
+                className="hidden" 
+              />
+              <input 
+                type="file" 
+                ref={newCatFileInputRef} 
+                accept="image/*" 
+                onChange={handleNewCatImageSelect} 
+                className="hidden" 
+              />
+
+              {/* Add New Category Box */}
+              <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-200 mb-8 space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">Add New Category</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1.5">Category Name *</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Seafood Starters, Signature Platters..." 
+                      value={newCategoryName} 
+                      onChange={e => setNewCategoryName(e.target.value)} 
+                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1.5">Background Picture (Optional)</label>
+                    {newCategoryImage ? (
+                      <div className="flex items-center gap-3 p-2 bg-white border border-neutral-300 rounded-xl">
+                        <img src={newCategoryImage} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-neutral-200 shadow-sm" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs text-green-700 font-semibold block">Photo attached</span>
+                          <span className="text-[11px] text-neutral-400">Compressed</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 pr-1">
+                          <button 
+                            type="button" 
+                            onClick={() => newCatFileInputRef.current?.click()} 
+                            disabled={compressingNewCatImage}
+                            className="px-2.5 py-1 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
+                          >
+                            Change
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => setNewCategoryImage('')} 
+                            className="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => newCatFileInputRef.current?.click()}
+                        disabled={compressingNewCatImage}
+                        className="w-full py-2.5 px-3 border border-dashed border-neutral-300 hover:border-amber-500 hover:bg-amber-50/40 rounded-xl text-neutral-600 hover:text-amber-800 flex items-center justify-center gap-2 text-xs font-medium transition-colors bg-white"
+                      >
+                        <Camera className="w-4 h-4 text-neutral-400" />
+                        <span>{compressingNewCatImage ? 'Processing photo...' : 'Choose Category Background Photo'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button 
+                    onClick={handleAddCategory} 
+                    disabled={!newCategoryName.trim()}
+                    className="bg-neutral-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-black transition-colors flex items-center gap-2 text-sm shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Add Category
+                  </button>
+                </div>
+              </div>
+
+              {/* Categories List Table */}
+              <div className="border border-neutral-200 rounded-2xl overflow-hidden shadow-sm bg-white">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-neutral-50 border-b border-neutral-200">
-                    <tr><th className="px-4 py-3 font-semibold text-neutral-600">Name</th><th className="px-4 py-3 text-right font-semibold text-neutral-600">Actions</th></tr>
+                  <thead className="bg-neutral-50/90 border-b border-neutral-200 text-xs font-bold uppercase tracking-wider text-neutral-500">
+                    <tr>
+                      <th className="px-5 py-3.5">Background Photo</th>
+                      <th className="px-5 py-3.5">Category Name</th>
+                      <th className="px-5 py-3.5">Dishes</th>
+                      <th className="px-5 py-3.5 text-right">Actions</th>
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {categories.map(c => (
-                      <tr key={c.id}>
-                        <td className="px-4 py-3 font-medium">{c.name}</td>
-                        <td className="px-4 py-3 text-right"><button onClick={() => handleRemoveCategory(c.id)} className="text-red-600 hover:underline">Delete</button></td>
+                    {categories.map(c => {
+                      const count = menuItems.filter(m => m.category === c.name).length;
+                      const hasCustomPhoto = Boolean(c.imageUrl || c.image);
+                      const bgPhotoUrl = c.imageUrl || c.image || DEFAULT_CATEGORY_BG;
+                      const isUploadingThis = uploadingCatId === c.id;
+
+                      return (
+                        <tr key={c.id} className="hover:bg-neutral-50/70 transition-colors">
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="relative group w-16 h-12 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 shadow-sm shrink-0">
+                                <img 
+                                  src={bgPhotoUrl} 
+                                  alt={c.name} 
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => triggerCategoryPhotoUpload(c.id)}
+                                  disabled={isUploadingThis}
+                                  className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                                  title="Change background photo"
+                                >
+                                  <Camera className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                hasCustomPhoto ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-neutral-100 text-neutral-600'
+                              }`}>
+                                {isUploadingThis ? 'Uploading...' : hasCustomPhoto ? 'Custom BG' : 'Default BG'}
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-3 font-bold text-neutral-900">
+                            {c.name}
+                          </td>
+
+                          <td className="px-5 py-3 text-neutral-500 font-medium">
+                            <span className="inline-block px-2.5 py-0.5 bg-neutral-100 rounded-md text-xs font-semibold text-neutral-700">
+                              {count} {count === 1 ? 'item' : 'items'}
+                            </span>
+                          </td>
+
+                          <td className="px-5 py-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2">
+                              {/* Quick Upload / Change Photo button */}
+                              <button
+                                type="button"
+                                onClick={() => triggerCategoryPhotoUpload(c.id)}
+                                disabled={isUploadingThis}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                                title="Upload or change background photo"
+                              >
+                                <Camera className="w-3.5 h-3.5 text-neutral-500" />
+                                <span>{isUploadingThis ? 'Saving...' : hasCustomPhoto ? 'Change Photo' : 'Add Photo'}</span>
+                              </button>
+
+                              {/* Remove custom photo if present */}
+                              {hasCustomPhoto && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCategoryPhoto(c)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition-colors"
+                                  title="Reset to default background photo"
+                                >
+                                  <span>Reset BG</span>
+                                </button>
+                              )}
+
+                              {/* Edit Name & Photo */}
+                              <button
+                                type="button"
+                                onClick={() => handleStartEditCategory(c)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition-colors"
+                                title="Edit category name or photo"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                                <span>Edit</span>
+                              </button>
+
+                              {/* Delete */}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCategory(c.id)}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                                title="Delete category"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {categories.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-5 py-10 text-center text-neutral-500">
+                          No categories found. Add your first category above!
+                        </td>
                       </tr>
-                    ))}
-                    {categories.length === 0 && <tr><td colSpan={2} className="px-4 py-8 text-center text-neutral-500">No categories found.</td></tr>}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -630,6 +1059,316 @@ return (
           )}
         </div>
       </div>
+
+      {/* Edit Menu Item Modal */}
+      <AnimatePresence>
+        {editingItem && (
+          <div 
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={() => setEditingItem(null)}
+          >
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-neutral-200 max-h-[90vh] flex flex-col"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+                <div>
+                  <h3 className="font-bold text-lg text-neutral-900">Edit Menu Item</h3>
+                  <p className="text-xs text-neutral-500">Update item details, dietary flags, or photo</p>
+                </div>
+                <button 
+                  onClick={() => setEditingItem(null)}
+                  className="text-neutral-400 hover:text-neutral-700 p-1.5 rounded-full hover:bg-neutral-200 transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-4 flex-1">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Item Name</label>
+                  <input 
+                    type="text" 
+                    value={editingItem.name} 
+                    onChange={e => setEditingItem({ ...editingItem, name: e.target.value })} 
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                    placeholder="Item name"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Price (₹)</label>
+                    <input 
+                      type="text" 
+                      value={editingItem.price} 
+                      onChange={e => setEditingItem({ ...editingItem, price: e.target.value })} 
+                      className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                      placeholder="e.g. 260"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Category</label>
+                    <select 
+                      value={editingItem.category} 
+                      onChange={e => setEditingItem({ ...editingItem, category: e.target.value })} 
+                      className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                    >
+                      <option value="">Select category...</option>
+                      {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Description</label>
+                  <textarea 
+                    rows={3}
+                    value={editingItem.description} 
+                    onChange={e => setEditingItem({ ...editingItem, description: e.target.value })} 
+                    placeholder="Flavor notes, ingredients, preparation..."
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500 resize-none" 
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Dietary Type</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditingItem({ ...editingItem, isVeg: !editingItem.isVeg })}
+                      className={`w-full py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+                        editingItem.isVeg ? 'bg-green-50 border-green-300 text-green-700 shadow-sm' : 'bg-red-50 border-red-200 text-red-700 shadow-sm'
+                      }`}
+                    >
+                      <DietarySymbol isVeg={editingItem.isVeg} size="sm" />
+                      <span>{editingItem.isVeg ? 'Vegetarian' : 'Non-Vegetarian'}</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Recommendation</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditingItem({ ...editingItem, isChefRecommendation: !editingItem.isChefRecommendation })}
+                      className={`w-full py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                        editingItem.isChefRecommendation ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm' : 'bg-neutral-50 border-neutral-300 text-neutral-600 hover:bg-neutral-100'
+                      }`}
+                    >
+                      <Flame className={`w-3.5 h-3.5 ${editingItem.isChefRecommendation ? 'text-amber-600 fill-amber-500' : 'text-neutral-400'}`} />
+                      <span>{editingItem.isChefRecommendation ? "Chef's Special" : 'Standard'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Photo management */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Dish Photo</label>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    ref={editFileInputRef} 
+                    onChange={handleEditImageSelect} 
+                    className="hidden" 
+                  />
+                  {editingItem.imageUrl ? (
+                    <div className="flex items-center gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-xl">
+                      <img src={editingItem.imageUrl} alt={editingItem.name} className="w-16 h-16 object-cover rounded-lg border border-neutral-300 shadow-sm" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs text-green-700 font-semibold block">Photo attached</span>
+                        <p className="text-[11px] text-neutral-400 truncate">Optimized and ready to save</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => editFileInputRef.current?.click()}
+                          disabled={compressingEditImage}
+                          className="text-xs px-2.5 py-1.5 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-lg text-neutral-700 font-medium transition-colors"
+                        >
+                          Change
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ ...editingItem, imageUrl: '' })}
+                          className="text-xs px-2.5 py-1.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-red-600 font-medium transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => editFileInputRef.current?.click()}
+                      disabled={compressingEditImage}
+                      className="w-full py-4 border-2 border-dashed border-neutral-300 hover:border-amber-400 rounded-xl text-neutral-600 hover:text-amber-700 flex flex-col items-center justify-center gap-1.5 transition-colors bg-neutral-50/50"
+                    >
+                      <Camera className="w-5 h-5 text-neutral-400" />
+                      <span className="text-xs font-medium">
+                        {compressingEditImage ? 'Compressing image...' : 'Click to upload a dish photo'}
+                      </span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-neutral-50 border-t border-neutral-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-4 py-2 border border-neutral-300 hover:bg-neutral-100 rounded-lg text-sm font-medium text-neutral-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEdit}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Category Modal */}
+      <AnimatePresence>
+        {editingCategory && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setEditingCategory(null)}
+            />
+
+            {/* Hidden file input for edit category modal */}
+            <input 
+              type="file" 
+              ref={editCatFileInputRef} 
+              accept="image/*" 
+              onChange={handleEditCatImageSelect} 
+              className="hidden" 
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-neutral-200 overflow-hidden z-10 flex flex-col max-h-[90vh]"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+                <div>
+                  <h3 className="text-lg font-bold text-neutral-900">Edit Category</h3>
+                  <p className="text-xs text-neutral-500">Update category title and background photo</p>
+                </div>
+                <button
+                  onClick={() => setEditingCategory(null)}
+                  className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200/60 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-5 overflow-y-auto">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                    Category Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={editingCategory.name}
+                    onChange={(e) => setEditingCategory(prev => prev ? { ...prev, name: e.target.value } : null)}
+                    className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                    Category Background Picture
+                  </label>
+                  
+                  <div className="relative rounded-2xl overflow-hidden border border-neutral-200 bg-neutral-950 aspect-[16/9] mb-3 group shadow-inner">
+                    <img 
+                      src={editingCategory.imageUrl || DEFAULT_CATEGORY_BG} 
+                      alt="Category Preview" 
+                      className="w-full h-full object-cover opacity-60" 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-4">
+                      <p className="text-white font-black text-xl drop-shadow-md">
+                        {editingCategory.name || 'Category Name'}
+                      </p>
+                      <p className="text-amber-400 text-xs font-semibold">
+                        Preview of category card presentation
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => editCatFileInputRef.current?.click()}
+                      disabled={compressingEditCatImage}
+                      className="absolute top-3 right-3 px-3 py-1.5 bg-black/70 hover:bg-black/90 text-white rounded-lg text-xs font-medium backdrop-blur-md transition-colors flex items-center gap-1.5 shadow"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>{compressingEditCatImage ? 'Processing...' : 'Change Photo'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-neutral-500">
+                      {editingCategory.imageUrl ? (
+                        <span className="text-emerald-700 font-semibold">Custom background photo attached</span>
+                      ) : (
+                        <span>Currently using default culinary background</span>
+                      )}
+                    </div>
+                    {editingCategory.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingCategory(prev => prev ? { ...prev, imageUrl: '' } : null)}
+                        className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline"
+                      >
+                        Reset to default photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 bg-neutral-50 border-t border-neutral-200 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingCategory(null)}
+                  className="px-4 py-2 border border-neutral-300 hover:bg-neutral-100 rounded-lg text-sm font-medium text-neutral-700 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEditCategory}
+                  disabled={!editingCategory.name.trim()}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

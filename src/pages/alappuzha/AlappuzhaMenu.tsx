@@ -8,6 +8,8 @@ import { alappuzhaMenu as staticAlappuzhaMenu, alappuzhaCategories as staticAlap
 import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
 
+const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1200&auto=format&fit=crop";
+
 export default function AlappuzhaMenu() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<any | null>(null);
@@ -45,7 +47,16 @@ export default function AlappuzhaMenu() {
     });
     const unsubCat = onSnapshot(query(collection(db, 'categories'), where('branchSlug', '==', 'alappuzha')), (snapshot) => {
       if (!snapshot.empty) {
-        setAlappuzhaCategories(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+        const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAlappuzhaCategories(() => {
+          const dbCatMap = new Map(dbCats.map((cat: any) => [cat.id, cat]));
+          const merged = staticAlappuzhaCategories.map(staticCat => dbCatMap.get(staticCat.id) || staticCat);
+          const existingIds = new Set(staticAlappuzhaCategories.map(c => c.id));
+          dbCats.forEach((cat: any) => {
+            if (!existingIds.has(cat.id)) merged.push(cat);
+          });
+          return merged;
+        });
       }
     });
     return () => { unsubMenu(); unsubCat(); };
@@ -201,27 +212,34 @@ export default function AlappuzhaMenu() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.05 }}
                     onClick={() => setActiveCategoryName(category.name)}
-                    className="bg-neutral-900 rounded-2xl shadow-sm border border-neutral-800 hover:border-teal-400 p-6 flex flex-col items-start text-left transition-colors group aspect-square justify-center relative overflow-hidden"
+                    className="bg-neutral-950 rounded-2xl shadow-md border border-neutral-800/80 hover:border-teal-400 p-5 flex flex-col justify-end text-left transition-all duration-300 group aspect-[4/3] sm:aspect-square relative overflow-hidden hover:shadow-xl hover:scale-[1.02]"
                   >
-                    {category.image && (
-                      <div className="absolute inset-0 z-0">
-                        <img src={category.image} alt={category.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10" />
-                      </div>
-                    )}
+                    {/* Category culinary background image */}
+                    <div className="absolute inset-0 z-0">
+                      <img 
+                        src={category.imageUrl || category.image || COMMON_CATEGORY_BG} 
+                        alt={category.name} 
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-75" 
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30 group-hover:from-black/90 group-hover:via-black/50 transition-colors" />
+                    </div>
+
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-teal-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10" />
                     
-                    <div className="relative z-10 w-full h-full flex flex-col">
-                      <h3 className="font-bold text-lg text-white mb-2 leading-tight group-hover:text-teal-300 transition-colors drop-shadow-md">
+                    {/* Category Name & Details displayed over image */}
+                    <div className="relative z-10 w-full flex flex-col justify-end">
+                      <h3 className="font-extrabold text-base sm:text-lg md:text-xl text-white mb-1.5 leading-snug group-hover:text-teal-300 transition-colors drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
                         {category.name}
                       </h3>
-                      <p className="text-neutral-300 text-sm font-medium drop-shadow-md">
-                        {itemCount} {itemCount === 1 ? 'Item' : 'Items'}
-                      </p>
                       
-                      <div className="mt-auto w-full flex justify-end">
-                        <div className="w-8 h-8 rounded-full bg-white/20 group-hover:bg-teal-500/80 backdrop-blur-sm flex items-center justify-center transition-colors">
-                          <ArrowRight className="w-4 h-4 text-white" />
+                      <div className="flex items-center justify-between mt-1">
+                        <span className="text-neutral-300 text-xs font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                          {itemCount} {itemCount === 1 ? 'Dish' : 'Dishes'}
+                        </span>
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 group-hover:bg-teal-500 backdrop-blur-md flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-sm text-white">
+                          <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
                         </div>
                       </div>
                     </div>
@@ -240,7 +258,7 @@ export default function AlappuzhaMenu() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
               onClick={() => setActiveCategoryName(null)}
             />
             
@@ -252,19 +270,32 @@ export default function AlappuzhaMenu() {
               className="fixed inset-x-0 bottom-0 md:inset-x-auto md:right-0 md:top-0 md:bottom-0 md:w-[480px] bg-white z-50 rounded-t-3xl md:rounded-none md:rounded-l-3xl shadow-2xl flex flex-col max-h-[90vh] md:max-h-screen"
             >
               <div className="w-full flex justify-center pt-3 pb-1 md:hidden cursor-pointer" onClick={() => setActiveCategoryName(null)}>
-                <div className="w-12 h-1.5 bg-neutral-200 rounded-full" />
+                <div className="w-12 h-1.5 bg-neutral-300 rounded-full" />
               </div>
 
-              <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between sticky top-0 bg-white/90 backdrop-blur-md z-10 md:pt-8 md:px-8">
-                <div>
-                  <h2 className="text-2xl font-bold text-neutral-900">{activeCategory.name}</h2>
-                  <p className="text-sm text-neutral-500">{categoryItems.length} Items</p>
+              {/* Panel Header with common background */}
+              <div className="relative px-6 py-5 md:py-7 md:px-8 border-b border-neutral-200 flex items-center justify-between sticky top-0 overflow-hidden z-10 bg-neutral-900 text-white">
+                <div className="absolute inset-0 z-0">
+                  <img 
+                    src={activeCategory.imageUrl || activeCategory.image || COMMON_CATEGORY_BG} 
+                    alt={activeCategory.name} 
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover opacity-35" 
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-900/80 to-black/50" />
+                </div>
+
+                <div className="relative z-10">
+                  <h2 className="text-2xl font-bold text-white drop-shadow-md">{activeCategory.name}</h2>
+                  <p className="text-xs sm:text-sm text-teal-300/90 font-medium drop-shadow-sm">{categoryItems.length} Dishes Available</p>
                 </div>
                 <button 
                   onClick={() => setActiveCategoryName(null)}
-                  className="p-2 bg-neutral-100 hover:bg-neutral-200 rounded-full transition-colors"
+                  className="relative z-10 p-2 bg-white/10 hover:bg-white/20 backdrop-blur-md rounded-full transition-colors text-white"
+                  aria-label="Close"
                 >
-                  <X className="w-5 h-5 text-neutral-600" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
