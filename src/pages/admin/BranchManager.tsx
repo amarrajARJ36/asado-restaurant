@@ -539,7 +539,7 @@ export default function BranchManager() {
                   <input 
                     type="text" 
                     defaultValue={branch.slug === 'kollam' ? "See Live Fifa 2026 Matches (Everyday)" : branch.slug === 'alappuzha' ? "Live Music Every Saturday" : ""}
-                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg focus:ring-2 focus:ring-amber-500 outline-none"
+                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg text-neutral-900 bg-white placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 outline-none"
                   />
                 </div>
                 <div className="flex items-center gap-3">
@@ -553,7 +553,7 @@ export default function BranchManager() {
             </div>
           )}
 
-                    {activeTab === 'menu' && (
+          {activeTab === 'menu' && (
             <div>
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold">Menu Items</h2>
@@ -563,22 +563,38 @@ export default function BranchManager() {
               <div className="bg-neutral-50 p-5 rounded-xl border border-neutral-200 mb-8 space-y-4">
                 <div className="flex flex-wrap gap-4 items-end">
                   <div className="flex-1 min-w-[200px]">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Item Name</label>
-                    <input type="text" value={newMenuName} onChange={e => setNewMenuName(e.target.value)} placeholder="e.g. Asado Beef Steak" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Item Name</label>
+                    <input 
+                      type="text" 
+                      value={newMenuName} 
+                      onChange={e => setNewMenuName(e.target.value)} 
+                      placeholder="e.g. Asado Beef Steak" 
+                      className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
+                    />
                   </div>
                   <div className="w-28">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Price</label>
-                    <input type="text" value={newMenuPrice} onChange={e => setNewMenuPrice(e.target.value)} placeholder="e.g. 260" className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" />
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Price</label>
+                    <input 
+                      type="text" 
+                      value={newMenuPrice} 
+                      onChange={e => setNewMenuPrice(e.target.value)} 
+                      placeholder="e.g. 260" 
+                      className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
+                    />
                   </div>
                   <div className="w-44">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Category</label>
-                    <select value={newMenuCategory} onChange={e => setNewMenuCategory(e.target.value)} className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Category</label>
+                    <select 
+                      value={newMenuCategory} 
+                      onChange={e => setNewMenuCategory(e.target.value)} 
+                      className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-500"
+                    >
                       <option value="">Select...</option>
                       {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
                   <div className="w-40">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Photo (Optional)</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Photo (Optional)</label>
                     <input type="file" accept="image/*" ref={newMenuFileInputRef} onChange={handleNewMenuImageSelect} className="hidden" />
                     {newMenuImage ? (
                       <div className="flex items-center gap-2 h-[38px] px-2 bg-white border border-neutral-300 rounded-lg">
@@ -602,13 +618,13 @@ export default function BranchManager() {
 
                 <div className="flex flex-wrap gap-4 items-end pt-2 border-t border-neutral-200">
                   <div className="flex-1 min-w-[240px]">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Description (Optional)</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Description (Optional)</label>
                     <input 
                       type="text" 
                       value={newMenuDescription} 
                       onChange={e => setNewMenuDescription(e.target.value)} 
                       placeholder="e.g. Juicy grilled steak served with signature pepper sauce" 
-                      className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                      className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
                     />
                   </div>
 
@@ -779,7 +795,7 @@ export default function BranchManager() {
                       value={newImageUrl}
                       onChange={(e) => setNewImageUrl(e.target.value)}
                       placeholder="https://images.unsplash.com/..."
-                      className="flex-1 px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                      className="flex-1 px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 outline-none"
                     />
                     <input 
                       type="file" 
@@ -802,7 +818,7 @@ export default function BranchManager() {
                   <select 
                     value={newImageCategory}
                     onChange={(e) => setNewImageCategory(e.target.value)}
-                    className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                    className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 focus:ring-2 focus:ring-amber-500 outline-none"
                   >
                     {galleryCategories.map(cat => (
                       <option key={cat} value={cat}>{cat}</option>
@@ -881,7 +897,7 @@ export default function BranchManager() {
                       placeholder="e.g. Seafood Starters, Signature Platters..." 
                       value={newCategoryName} 
                       onChange={e => setNewCategoryName(e.target.value)} 
-                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
                     />
                   </div>
 
@@ -1097,7 +1113,7 @@ export default function BranchManager() {
                     type="text" 
                     value={editingItem.name} 
                     onChange={e => setEditingItem({ ...editingItem, name: e.target.value })} 
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
                     placeholder="Item name"
                   />
                 </div>
@@ -1109,7 +1125,7 @@ export default function BranchManager() {
                       type="text" 
                       value={editingItem.price} 
                       onChange={e => setEditingItem({ ...editingItem, price: e.target.value })} 
-                      className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500" 
+                      className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
                       placeholder="e.g. 260"
                     />
                   </div>
@@ -1118,7 +1134,7 @@ export default function BranchManager() {
                     <select 
                       value={editingItem.category} 
                       onChange={e => setEditingItem({ ...editingItem, category: e.target.value })} 
-                      className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                      className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-500"
                     >
                       <option value="">Select category...</option>
                       {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
@@ -1133,7 +1149,7 @@ export default function BranchManager() {
                     value={editingItem.description} 
                     onChange={e => setEditingItem({ ...editingItem, description: e.target.value })} 
                     placeholder="Flavor notes, ingredients, preparation..."
-                    className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500 resize-none" 
+                    className="w-full px-3.5 py-2.5 bg-neutral-50 focus:bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500 resize-none" 
                   />
                 </div>
 
@@ -1291,7 +1307,7 @@ export default function BranchManager() {
                     type="text"
                     value={editingCategory.name}
                     onChange={(e) => setEditingCategory(prev => prev ? { ...prev, name: e.target.value } : null)}
-                    className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-amber-500"
+                    className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500"
                   />
                 </div>
 

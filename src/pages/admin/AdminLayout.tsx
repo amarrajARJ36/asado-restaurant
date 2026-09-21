@@ -7,7 +7,7 @@ export default function AdminLayout() {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-neutral-100 flex">
+    <div className="min-h-screen bg-neutral-100 text-neutral-900 flex">
       
       {/* Sidebar */}
       <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col shrink-0">
@@ -69,7 +69,7 @@ export default function AdminLayout() {
             <input 
               type="text" 
               placeholder="Search..." 
-              className="w-full pl-9 pr-4 py-2 bg-neutral-100 border-none rounded-lg text-sm focus:ring-2 focus:ring-amber-500 outline-none"
+              className="w-full pl-9 pr-4 py-2 bg-neutral-100 border border-neutral-200 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 outline-none"
             />
           </div>
           <div className="flex items-center gap-4">

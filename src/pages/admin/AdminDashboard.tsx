@@ -66,7 +66,7 @@ export default function AdminDashboard() {
                   type="text" 
                   value={newBanner.title}
                   onChange={(e) => setNewBanner({...newBanner, title: e.target.value})}
-                  className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   placeholder="e.g., Buy 2 Get 1 Free"
                 />
               </div>
@@ -76,7 +76,7 @@ export default function AdminDashboard() {
                   type="text" 
                   value={newBanner.subtitle}
                   onChange={(e) => setNewBanner({...newBanner, subtitle: e.target.value})}
-                  className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   placeholder="e.g., Valid this weekend"
                 />
               </div>
@@ -86,7 +86,7 @@ export default function AdminDashboard() {
                   type="text" 
                   value={newBanner.tagText}
                   onChange={(e) => setNewBanner({...newBanner, tagText: e.target.value})}
-                  className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   placeholder="e.g., Today's Special"
                 />
               </div>
@@ -94,7 +94,7 @@ export default function AdminDashboard() {
               <div>
                 <label className="block text-sm font-medium text-neutral-700 mb-1">Target Branch</label>
                 <select 
-                  className="w-full border border-neutral-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  className="w-full bg-white border border-neutral-300 rounded-lg px-3 py-2 text-sm text-neutral-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
                   value={newBanner.branchSlug || 'all'}
                   onChange={(e) => setNewBanner({...newBanner, branchSlug: e.target.value})}
                 >
