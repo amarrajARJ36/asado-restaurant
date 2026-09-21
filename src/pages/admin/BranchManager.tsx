@@ -1,20 +1,39 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useParams } from 'react-router-dom';
 import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
 import { useState, useEffect, useRef } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { compressImage } from '../../lib/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
+import { useBanners, Banner } from '../../hooks/useBanners';
 
 export default function BranchManager() {
   const { branchId } = useParams();
   const branch = branches.find(b => b.slug === branchId);
   const [activeTab, setActiveTab] = useState('menu');
   
+  // Offers Banner Hook & State
+  const { allBanners, addBanner, updateBanner, toggleBanner, removeBanner } = useBanners(undefined, { includeInactive: true });
+  const branchBanners = allBanners.filter(b => b.branchSlug === branchId || b.branchSlug === 'all');
+  const targetBanner = branchBanners.find(b => b.branchSlug === branchId) || branchBanners[0];
+
+  const [bannerTitle, setBannerTitle] = useState('');
+  const [bannerSubtitle, setBannerSubtitle] = useState('');
+  const [bannerTagText, setBannerTagText] = useState("Today's Special");
+  const [bannerIsActive, setBannerIsActive] = useState(true);
+  const [bannerTheme, setBannerTheme] = useState('amber');
+  const [bannerSavedNotice, setBannerSavedNotice] = useState(false);
+  const [bannerInitDone, setBannerInitDone] = useState(false);
+  const [isSavingBanner, setIsSavingBanner] = useState(false);
+
+  // Menu Category Filter & Reordering State
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
+  const [reorderSaving, setReorderSaving] = useState(false);
+
   // Gallery State
   const [galleryImages, setGalleryImages] = useState<any[]>([]);
   const [newImageUrl, setNewImageUrl] = useState('');
@@ -120,6 +139,162 @@ export default function BranchManager() {
     return () => { unsubscribe(); unsubMenu(); unsubCat(); };
   }, [branchId]);
 
+  // Sync banner state for this branch
+  useEffect(() => {
+    if (targetBanner && !bannerInitDone) {
+      setBannerTitle(targetBanner.title || '');
+      setBannerSubtitle(targetBanner.subtitle || '');
+      setBannerTagText(targetBanner.tagText || "Today's Special");
+      setBannerIsActive(targetBanner.isActive !== false);
+      const th = targetBanner.bgColor?.includes('blue') ? 'blue' : targetBanner.bgColor?.includes('emerald') ? 'green' : targetBanner.bgColor?.includes('neutral-900') ? 'dark' : 'amber';
+      setBannerTheme(th);
+      setBannerInitDone(true);
+    } else if (!targetBanner && !bannerInitDone && branch) {
+      setBannerTitle(branch.slug === 'kollam' ? "See Live FIFA 2026 Matches (Everyday)" : "Live Music Every Saturday");
+      setBannerSubtitle(branch.slug === 'kollam' ? "Watch live match screenings daily by the lakeside terrace." : "Acoustic performances and signature barbecue specials.");
+      setBannerTagText("Special Event");
+      setBannerIsActive(true);
+      setBannerTheme('amber');
+      setBannerInitDone(true);
+    }
+  }, [targetBanner, branch, bannerInitDone]);
+
+  const handleSaveBanner = async () => {
+    if (!bannerTitle.trim()) {
+      alert("Please provide a banner title.");
+      return;
+    }
+    setIsSavingBanner(true);
+    const themeConfig = bannerTheme === 'blue'
+      ? { bgColor: 'bg-blue-50', textColor: 'text-blue-950', tagBg: 'bg-blue-200', tagColor: 'text-blue-900' }
+      : bannerTheme === 'green'
+      ? { bgColor: 'bg-emerald-50', textColor: 'text-emerald-950', tagBg: 'bg-emerald-200', tagColor: 'text-emerald-900' }
+      : bannerTheme === 'dark'
+      ? { bgColor: 'bg-neutral-900', textColor: 'text-white', tagBg: 'bg-amber-500', tagColor: 'text-neutral-950' }
+      : { bgColor: 'bg-amber-50', textColor: 'text-amber-950', tagBg: 'bg-amber-200', tagColor: 'text-amber-900' };
+
+    try {
+      if (targetBanner && (targetBanner.branchSlug === branchId || targetBanner.id.startsWith('starter-'))) {
+        await updateBanner(targetBanner.id, {
+          title: bannerTitle.trim(),
+          subtitle: bannerSubtitle.trim(),
+          tagText: bannerTagText.trim(),
+          branchSlug: branchId,
+          isActive: bannerIsActive,
+          ...themeConfig
+        });
+      } else {
+        await addBanner({
+          title: bannerTitle.trim(),
+          subtitle: bannerSubtitle.trim(),
+          tagText: bannerTagText.trim(),
+          branchSlug: branchId,
+          isActive: bannerIsActive,
+          ...themeConfig
+        });
+      }
+      setBannerSavedNotice(true);
+      setTimeout(() => setBannerSavedNotice(false), 4000);
+    } catch (err) {
+      console.error("Failed to save banner:", err);
+      alert("Error saving banner: " + (err as Error).message);
+    } finally {
+      setIsSavingBanner(false);
+    }
+  };
+
+  const handleToggleBannerActive = async (bannerIdToToggle?: string, currentState?: boolean) => {
+    const id = bannerIdToToggle || targetBanner?.id;
+    const nextState = currentState !== undefined ? !currentState : !bannerIsActive;
+    setBannerIsActive(nextState);
+    if (id) {
+      try {
+        await toggleBanner(id, nextState);
+      } catch (err) {
+        console.error("Error toggling banner", err);
+      }
+    }
+  };
+
+  // Filtered menu items for table display
+  const filteredMenuItems = useMemo(() => {
+    let list = [...menuItems];
+    if (selectedCategoryFilter !== 'All') {
+      list = list.filter(item => item.category === selectedCategoryFilter);
+    }
+    // Sort by order ascending, then name
+    list.sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 9999;
+      const orderB = typeof b.order === 'number' ? b.order : 9999;
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    return list;
+  }, [menuItems, selectedCategoryFilter]);
+
+  // Reordering function within each category
+  const handleMoveItem = async (itemToMove: any, direction: 'up' | 'down') => {
+    if (reorderSaving) return;
+    const catName = itemToMove.category;
+    // Get all items in this category in current order
+    const catItems = menuItems
+      .filter(m => m.category === catName)
+      .sort((a, b) => {
+        const orderA = typeof a.order === 'number' ? a.order : 9999;
+        const orderB = typeof b.order === 'number' ? b.order : 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
+    const curIndex = catItems.findIndex(m => m.id === itemToMove.id);
+    if (curIndex === -1) return;
+    const targetIndex = direction === 'up' ? curIndex - 1 : curIndex + 1;
+    if (targetIndex < 0 || targetIndex >= catItems.length) return;
+
+    setReorderSaving(true);
+    const swapped = [...catItems];
+    const temp = swapped[curIndex];
+    swapped[curIndex] = swapped[targetIndex];
+    swapped[targetIndex] = temp;
+
+    const updatedMap = new Map<string, number>();
+    swapped.forEach((item, index) => {
+      updatedMap.set(item.id, index);
+    });
+
+    // Immediate optimistic update
+    setMenuItems(prev => prev.map(m => {
+      if (updatedMap.has(m.id)) {
+        return { ...m, order: updatedMap.get(m.id) };
+      }
+      return m;
+    }));
+
+    try {
+      const batch = writeBatch(db);
+      swapped.forEach((item, index) => {
+        const ref = doc(db, 'menuItems', item.id);
+        batch.set(ref, {
+          order: index,
+          name: item.name,
+          price: item.price,
+          category: item.category,
+          branchSlug: branchId,
+          isVeg: Boolean(item.isVeg),
+          isChefRecommendation: Boolean(item.isChefRecommendation),
+          description: item.description || '',
+          imageUrl: item.imageUrl || null
+        }, { merge: true });
+      });
+      await batch.commit();
+    } catch (err) {
+      console.error("Failed to commit item reorder", err);
+      handleFirestoreError(err, OperationType.UPDATE, 'menuItems');
+    } finally {
+      setReorderSaving(false);
+    }
+  };
+
   if (!branch) return <div>Branch not found</div>;
 
   const tabs = [
@@ -208,6 +383,7 @@ export default function BranchManager() {
     if (!newMenuName || !newMenuPrice || !newMenuCategory) return;
     const id = Date.now().toString();
     try {
+      const catCount = menuItems.filter(m => m.category === newMenuCategory).length;
       await setDoc(doc(db, 'menuItems', id), {
         name: newMenuName,
         price: newMenuPrice,
@@ -216,6 +392,7 @@ export default function BranchManager() {
         isVeg: newMenuIsVeg,
         isChefRecommendation: newMenuIsChefRec,
         imageUrl: newMenuImage || null,
+        order: catCount,
         status: 'active',
         branchSlug: branchId
       });
@@ -531,34 +708,241 @@ export default function BranchManager() {
         <div className="flex-1 bg-white border border-neutral-200 rounded-2xl p-8 min-h-[500px]">
           {activeTab === 'offers' && (
             <div>
-              <h2 className="text-xl font-bold mb-6">Offers Banner</h2>
-              <p className="text-neutral-500 mb-6">This banner appears on the main brand page and branch home page.</p>
-              <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">Banner Text</label>
-                  <input 
-                    type="text" 
-                    defaultValue={branch.slug === 'kollam' ? "See Live Fifa 2026 Matches (Everyday)" : branch.slug === 'alappuzha' ? "Live Music Every Saturday" : ""}
-                    className="w-full px-4 py-2 border border-neutral-300 rounded-lg text-neutral-900 bg-white placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 outline-none"
-                  />
+                  <h2 className="text-xl font-bold text-neutral-900">Offers & Announcement Banner</h2>
+                  <p className="text-neutral-500 text-sm mt-0.5">Manage the promotional banner displayed on {branch.name}'s homepage and digital menu.</p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <input type="checkbox" id="bannerActive" defaultChecked className="w-4 h-4 text-amber-600 rounded" />
-                  <label htmlFor="bannerActive" className="text-sm font-medium text-neutral-700">Enable Banner</label>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleToggleBannerActive(targetBanner?.id, bannerIsActive)}
+                    type="button"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${
+                      bannerIsActive
+                        ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300'
+                        : 'bg-neutral-200 text-neutral-700 hover:bg-neutral-300 border border-neutral-300'
+                    }`}
+                  >
+                    {bannerIsActive ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Banner is Active (Visible)</span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5 text-neutral-500" />
+                        <span>Banner is Turned Off (Hidden)</span>
+                      </>
+                    )}
+                  </button>
                 </div>
-                <button className="bg-neutral-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-black transition-colors">
-                  Save Banner
-                </button>
+              </div>
+
+              {/* Banner Live Visual Preview */}
+              <div className="mb-8">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-neutral-500">Live Website Preview</span>
+                  {!bannerIsActive && (
+                    <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      Currently Turned Off (Visitors won't see this)
+                    </span>
+                  )}
+                </div>
+
+                <div className={`relative p-6 rounded-2xl border transition-all ${
+                  bannerIsActive 
+                    ? bannerTheme === 'blue'
+                      ? 'bg-blue-50 border-blue-200 text-blue-950'
+                      : bannerTheme === 'green'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                      : bannerTheme === 'dark'
+                      ? 'bg-neutral-900 border-neutral-800 text-white'
+                      : 'bg-amber-50 border-amber-200 text-amber-950'
+                    : 'bg-neutral-100 border-dashed border-neutral-300 text-neutral-600 opacity-80'
+                } flex flex-col justify-center items-center text-center shadow-sm`}>
+                  <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2.5 ${
+                    bannerTheme === 'blue'
+                      ? 'bg-blue-200 text-blue-900'
+                      : bannerTheme === 'green'
+                      ? 'bg-emerald-200 text-emerald-900'
+                      : bannerTheme === 'dark'
+                      ? 'bg-amber-500 text-neutral-950'
+                      : 'bg-amber-200 text-amber-900'
+                  }`}>
+                    {bannerTagText || "Today's Special"} • {branch.name}
+                  </span>
+
+                  <h3 className="text-xl md:text-2xl font-bold mb-1">
+                    {bannerTitle || "Enter banner title..."}
+                  </h3>
+                  <p className="text-sm opacity-90 max-w-xl">
+                    {bannerSubtitle || "Enter subtitle or details regarding this offer..."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Form Controls */}
+              <div className="bg-neutral-50 p-6 rounded-2xl border border-neutral-200 space-y-5 mb-6">
+                <div className="grid md:grid-cols-2 gap-5">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                      Banner Heading / Title
+                    </label>
+                    <input 
+                      type="text" 
+                      value={bannerTitle}
+                      onChange={e => setBannerTitle(e.target.value)}
+                      placeholder="e.g., Buy 2 Mojitos Get 1 Free, Live FIFA Matches Everyday"
+                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                      Offer Details / Subtitle
+                    </label>
+                    <input 
+                      type="text" 
+                      value={bannerSubtitle}
+                      onChange={e => setBannerSubtitle(e.target.value)}
+                      placeholder="e.g., Valid all weekend by the lake. Screenings start 7 PM."
+                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                      Tag / Badge Text
+                    </label>
+                    <input 
+                      type="text" 
+                      value={bannerTagText}
+                      onChange={e => setBannerTagText(e.target.value)}
+                      placeholder="e.g., Today's Special, Live Event, Happy Hour"
+                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                      Color Palette
+                    </label>
+                    <select
+                      value={bannerTheme}
+                      onChange={e => setBannerTheme(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                    >
+                      <option value="amber">Warm Amber (Signature)</option>
+                      <option value="blue">Cool Waterfront Blue</option>
+                      <option value="green">Fresh Emerald Green</option>
+                      <option value="dark">Luxury Obsidian Dark</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-6">
+                    <input 
+                      type="checkbox" 
+                      id="bannerActiveCheckbox" 
+                      checked={bannerIsActive} 
+                      onChange={e => setBannerIsActive(e.target.checked)}
+                      className="w-4 h-4 text-amber-600 rounded focus:ring-amber-500 cursor-pointer"
+                    />
+                    <label htmlFor="bannerActiveCheckbox" className="text-sm font-semibold text-neutral-800 cursor-pointer">
+                      Enable Banner (Visible to visitors)
+                    </label>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t border-neutral-200">
+                  <div>
+                    {bannerSavedNotice && (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-200">
+                        <Check className="w-3.5 h-3.5" /> Banner updated and saved successfully!
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleToggleBannerActive(targetBanner?.id, bannerIsActive)}
+                      className="px-4 py-2 border border-neutral-300 rounded-lg text-sm font-medium text-neutral-700 hover:bg-neutral-100 transition-colors"
+                    >
+                      {bannerIsActive ? 'Turn Off Banner' : 'Turn On Banner'}
+                    </button>
+
+                    <button 
+                      type="button"
+                      disabled={isSavingBanner}
+                      onClick={handleSaveBanner}
+                      className="bg-neutral-900 text-white px-6 py-2 rounded-lg font-semibold text-sm hover:bg-black transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      {isSavingBanner ? 'Saving...' : 'Save Banner'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === 'menu' && (
             <div>
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold">Menu Items</h2>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-neutral-900">Menu Items</h2>
+                  <p className="text-neutral-500 text-sm mt-0.5">Manage and reorder dishes for {branch.name}. Filter by category to adjust customer display order.</p>
+                </div>
               </div>
-              <p className="text-neutral-500 mb-6">Manage the digital menu for {branch.name}. Dishes automatically sync with dietary badges, descriptions, and compressed photos.</p>
+
+              {/* Category Filter Dropdown & Reordering Controls */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-amber-50/70 border border-amber-200 p-4 rounded-xl mb-6 shadow-xs">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-amber-700" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-neutral-700">Filter Category:</span>
+                  </div>
+                  <select 
+                    value={selectedCategoryFilter} 
+                    onChange={e => {
+                      const val = e.target.value;
+                      setSelectedCategoryFilter(val);
+                      if (val !== 'All') {
+                        setNewMenuCategory(val);
+                      }
+                    }}
+                    className="bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-neutral-900 shadow-sm focus:ring-2 focus:ring-amber-500 outline-none"
+                  >
+                    <option value="All">All Categories ({menuItems.length} items)</option>
+                    {categories.map(c => {
+                      const count = menuItems.filter(m => m.category === c.name).length;
+                      return (
+                        <option key={c.id || c.name} value={c.name}>
+                          {c.name} ({count} {count === 1 ? 'item' : 'items'})
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {selectedCategoryFilter !== 'All' && (
+                    <button
+                      onClick={() => setSelectedCategoryFilter('All')}
+                      className="text-xs font-medium text-amber-800 hover:text-amber-950 underline px-1"
+                    >
+                      Show All Categories
+                    </button>
+                  )}
+                </div>
+
+                <div className="text-xs font-medium text-neutral-600 flex items-center gap-2">
+                  <span>Showing <strong>{filteredMenuItems.length}</strong> {filteredMenuItems.length === 1 ? 'dish' : 'dishes'}</span>
+                  {reorderSaving && (
+                    <span className="text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded animate-pulse">
+                      Updating order...
+                    </span>
+                  )}
+                </div>
+              </div>
               
               <div className="bg-neutral-50 p-5 rounded-xl border border-neutral-200 mb-8 space-y-4">
                 <div className="flex flex-wrap gap-4 items-end">
@@ -666,11 +1050,17 @@ export default function BranchManager() {
                 </div>
               </div>
 
+              {/* Notice explaining reordering */}
+              <div className="text-xs text-neutral-500 mb-3 flex items-center justify-between">
+                <span>💡 Use the <strong>▲</strong> and <strong>▼</strong> buttons in the <strong>Order</strong> column to arrange dish sequence in customer menus.</span>
+              </div>
+
               <div className="border border-neutral-200 rounded-lg overflow-hidden">
                 <input type="file" accept="image/*" ref={menuFileInputRef} onChange={handleMenuImageUpload} className="hidden" />
                 <table className="w-full text-left text-sm">
                   <thead className="bg-neutral-50 border-b border-neutral-200">
                     <tr>
+                      <th className="px-3 py-3 font-semibold text-neutral-600 text-center w-20">Order</th>
                       <th className="px-4 py-3 font-semibold text-neutral-600">Item & Description</th>
                       <th className="px-4 py-3 font-semibold text-neutral-600">Type</th>
                       <th className="px-4 py-3 font-semibold text-neutral-600">Price</th>
@@ -680,98 +1070,136 @@ export default function BranchManager() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {menuItems.map(item => (
-                      <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
-                        <td className="px-4 py-3 max-w-[280px]">
-                          <div className="flex items-start gap-2">
-                            <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
-                            <div className="min-w-0">
-                              <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
-                                <span>{item.name}</span>
-                                {item.isChefRecommendation && (
-                                  <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                                    <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
-                                  </span>
-                                )}
-                              </div>
-                              {item.description ? (
-                                <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
-                                  <span>{item.description}</span>
-                                  <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
-                                    <Edit3 className="w-3 h-3" />
-                                  </button>
-                                </p>
-                              ) : (
-                                <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
-                                  <Plus className="w-2.5 h-2.5" /> Add description
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => toggleItemVeg(item)}
-                            title="Click to switch Veg / Non-Veg"
-                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
-                              item.isVeg 
-                                ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
-                                : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
-                            }`}
-                          >
-                            <DietarySymbol isVeg={item.isVeg} size="sm" />
-                            <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
-                          </button>
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
-                        <td className="px-4 py-3 text-neutral-600">{item.category}</td>
-                        <td className="px-4 py-3 text-center">
-                          {item.imageUrl ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
-                              <button 
-                                onClick={() => triggerMenuUpload(item.id)} 
-                                disabled={uploadingMenuId === item.id}
-                                className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                    {filteredMenuItems.map((item, idx) => {
+                      // Check if top or bottom within its category
+                      const itemsInThisCategory = filteredMenuItems.filter(m => m.category === item.category);
+                      const catIndex = itemsInThisCategory.findIndex(m => m.id === item.id);
+                      const isFirst = catIndex === 0;
+                      const isLast = catIndex === itemsInThisCategory.length - 1;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
+                          <td className="px-3 py-3 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-0.5 bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleMoveItem(item, 'up')}
+                                disabled={isFirst || reorderSaving}
+                                title={isFirst ? "At top of category" : "Move up"}
+                                className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
                               >
-                                {uploadingMenuId === item.id ? '...' : 'Change'}
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="text-[11px] font-bold text-neutral-700 px-1 min-w-[20px] text-center">
+                                {(item.order !== undefined && typeof item.order === 'number') ? item.order + 1 : idx + 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveItem(item, 'down')}
+                                disabled={isLast || reorderSaving}
+                                title={isLast ? "At bottom of category" : "Move down"}
+                                className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
                               </button>
                             </div>
-                          ) : (
-                            <button 
-                              onClick={() => triggerMenuUpload(item.id)} 
-                              disabled={uploadingMenuId === item.id} 
-                              className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
+                          </td>
+                          <td className="px-4 py-3 max-w-[280px]">
+                            <div className="flex items-start gap-2">
+                              <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                              <div className="min-w-0">
+                                <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
+                                  <span>{item.name}</span>
+                                  {item.isChefRecommendation && (
+                                    <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                      <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                    </span>
+                                  )}
+                                </div>
+                                {item.description ? (
+                                  <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
+                                    <span>{item.description}</span>
+                                    <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
+                                      <Edit3 className="w-3 h-3" />
+                                    </button>
+                                  </p>
+                                ) : (
+                                  <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
+                                    <Plus className="w-2.5 h-2.5" /> Add description
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => toggleItemVeg(item)}
+                              title="Click to switch Veg / Non-Veg"
+                              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                item.isVeg 
+                                  ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                                  : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                              }`}
                             >
-                              <Upload className="w-3 h-3" />
-                              {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
+                              <DietarySymbol isVeg={item.isVeg} size="sm" />
+                              <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
                             </button>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right whitespace-nowrap">
-                          <div className="flex items-center justify-end gap-2">
-                            <button 
-                              onClick={() => handleStartEdit(item)} 
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
-                              title="Edit item details"
-                            >
-                              <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
-                              <span>Edit</span>
-                            </button>
-                            <button 
-                              onClick={() => handleRemoveMenu(item.id)} 
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
-                              title="Delete item"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              <span>Delete</span>
-                            </button>
-                          </div>
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
+                          <td className="px-4 py-3 text-neutral-600">{item.category}</td>
+                          <td className="px-4 py-3 text-center">
+                            {item.imageUrl ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
+                                <button 
+                                  onClick={() => triggerMenuUpload(item.id)} 
+                                  disabled={uploadingMenuId === item.id}
+                                  className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                                >
+                                  {uploadingMenuId === item.id ? '...' : 'Change'}
+                                </button>
+                              </div>
+                            ) : (
+                              <button 
+                                onClick={() => triggerMenuUpload(item.id)} 
+                                disabled={uploadingMenuId === item.id} 
+                                className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
+                              >
+                                <Upload className="w-3 h-3" />
+                                {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
+                              </button>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => handleStartEdit(item)} 
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                                title="Edit item details"
+                              >
+                                <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                                <span>Edit</span>
+                              </button>
+                              <button 
+                                onClick={() => handleRemoveMenu(item.id)} 
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                                title="Delete item"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredMenuItems.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center text-neutral-500">
+                          <p className="text-sm font-medium">No menu items found in category "{selectedCategoryFilter}".</p>
+                          <p className="text-xs mt-1 text-neutral-400">Add an item above to populate this category.</p>
                         </td>
                       </tr>
-                    ))}
-                    {menuItems.length === 0 && (
-                      <tr><td colSpan={6} className="px-4 py-8 text-center text-neutral-500">No menu items found.</td></tr>
                     )}
                   </tbody>
                 </table>

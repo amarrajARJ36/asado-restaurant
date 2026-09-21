@@ -74,8 +74,15 @@ export default function KollamMenu() {
 
   const categoryItems = useMemo(() => {
     if (!activeCategoryName) return [];
-    return kollamMenu.filter(item => item.category === activeCategoryName);
-  }, [activeCategoryName]);
+    return kollamMenu
+      .filter(item => item.category === activeCategoryName)
+      .sort((a, b) => {
+        const orderA = typeof a.order === 'number' ? a.order : 9999;
+        const orderB = typeof b.order === 'number' ? b.order : 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return 0;
+      });
+  }, [activeCategoryName, kollamMenu]);
 
   // Lock body scroll when panel is open
   useEffect(() => {

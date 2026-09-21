@@ -37,6 +37,7 @@
         "name": { "type": "string", "maxLength": 100 },
         "price": { "type": "string", "maxLength": 20 },
         "category": { "type": "string", "maxLength": 50 },
+        "order": { "type": "number" },
         "status": { "type": "string", "maxLength": 20 },
         "branchSlug": { "type": "string", "maxLength": 50 }
       },
