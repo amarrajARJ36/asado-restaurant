@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { Search, Flame, ArrowRight, X } from 'lucide-react';
+import { Search, Flame, ArrowRight, X, List, LayoutGrid, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { kollamMenu as staticKollamMenu, kollamCategories as staticKollamCategories } from '../../data';
 import DietarySymbol from '../../components/DietarySymbol';
@@ -16,6 +16,8 @@ export default function KollamMenu() {
   const [isDesktop, setIsDesktop] = useState(true);
   const [kollamMenu, setKollamMenu] = useState<any[]>(staticKollamMenu);
   const [kollamCategories, setKollamCategories] = useState<any[]>(staticKollamCategories);
+  const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
+  const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('All');
 
   useEffect(() => {
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
@@ -80,9 +82,42 @@ export default function KollamMenu() {
         const orderA = typeof a.order === 'number' ? a.order : 9999;
         const orderB = typeof b.order === 'number' ? b.order : 9999;
         if (orderA !== orderB) return orderA - orderB;
-        return 0;
+        return (a.name || '').localeCompare(b.name || '');
       });
   }, [activeCategoryName, kollamMenu]);
+
+  // All menu items organized category-wise for customer list view
+  const categoryWiseMenu = useMemo(() => {
+    let catList: string[] = [];
+    if (selectedCategoryTab !== 'All') {
+      catList = [selectedCategoryTab];
+    } else {
+      const knownNames = new Set(kollamCategories.map(c => c.name));
+      catList = kollamCategories.map(c => c.name);
+      kollamMenu.forEach(item => {
+        if (item.category && !knownNames.has(item.category) && !catList.includes(item.category)) {
+          catList.push(item.category);
+        }
+      });
+    }
+
+    return catList.map(catName => {
+      const items = kollamMenu
+        .filter(m => m.category === catName)
+        .sort((a, b) => {
+          const orderA = typeof a.order === 'number' ? a.order : 9999;
+          const orderB = typeof b.order === 'number' ? b.order : 9999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+      const catObj = kollamCategories.find(c => c.name === catName);
+      return {
+        categoryName: catName,
+        categoryObj: catObj,
+        items
+      };
+    }).filter(group => group.items.length > 0);
+  }, [kollamCategories, kollamMenu, selectedCategoryTab]);
 
   // Lock body scroll when panel is open
   useEffect(() => {
@@ -208,52 +243,206 @@ export default function KollamMenu() {
           </div>
         ) : (
           <div>
-            <h2 className="text-xl font-bold text-neutral-900 mb-6">Categories</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {kollamCategories.map((category, index) => {
-                const itemCount = kollamMenu.filter(m => m.category === category.name).length;
-                return (
-                  <motion.button
-                    key={category.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    onClick={() => setActiveCategoryName(category.name)}
-                    className="bg-neutral-950 rounded-2xl shadow-md border border-neutral-800/80 hover:border-amber-400 p-5 flex flex-col justify-end text-left transition-all duration-300 group aspect-[4/3] sm:aspect-square relative overflow-hidden hover:shadow-xl hover:scale-[1.02]"
-                  >
-                    {/* Category culinary background image */}
-                    <div className="absolute inset-0 z-0">
-                      <img 
-                        src={category.imageUrl || category.image || COMMON_CATEGORY_BG} 
-                        alt={category.name} 
-                        loading="lazy"
-                        decoding="async"
-                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-75" 
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30 group-hover:from-black/90 group-hover:via-black/50 transition-colors" />
-                    </div>
+            {/* View Switcher & Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-bold text-neutral-900 tracking-tight">Our Menu</h2>
+                <p className="text-neutral-500 text-xs sm:text-sm mt-0.5">Explore our handcrafted dishes arranged category by category.</p>
+              </div>
 
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10" />
-                    
-                    {/* Category Name & Details displayed over image */}
-                    <div className="relative z-10 w-full flex flex-col justify-end">
-                      <h3 className="font-extrabold text-base sm:text-lg md:text-xl text-white mb-1.5 leading-snug group-hover:text-amber-300 transition-colors drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                        {category.name}
-                      </h3>
-                      
-                      <div className="flex items-center justify-between mt-1">
-                        <span className="text-neutral-300 text-xs font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                          {itemCount} {itemCount === 1 ? 'Dish' : 'Dishes'}
+              <div className="flex items-center gap-1.5 bg-neutral-200/80 p-1 rounded-xl self-start sm:self-auto shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'list'
+                      ? 'bg-white text-neutral-900 shadow-xs'
+                      : 'text-neutral-600 hover:text-neutral-900'
+                  }`}
+                >
+                  <List className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Category List</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'grid'
+                      ? 'bg-white text-neutral-900 shadow-xs'
+                      : 'text-neutral-600 hover:text-neutral-900'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Category Tiles</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Category Filter Chips / Jump Bar */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-6 scrollbar-none">
+              <button
+                type="button"
+                onClick={() => setSelectedCategoryTab('All')}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                  selectedCategoryTab === 'All'
+                    ? 'bg-amber-500 text-neutral-950 shadow-xs scale-105'
+                    : 'bg-white text-neutral-700 hover:bg-neutral-100 border border-neutral-200'
+                }`}
+              >
+                All Categories ({kollamMenu.length})
+              </button>
+              {kollamCategories.map(c => {
+                const count = kollamMenu.filter(m => m.category === c.name).length;
+                const isSelected = selectedCategoryTab === c.name;
+                return (
+                  <button
+                    key={c.id || c.name}
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategoryTab(c.name);
+                    }}
+                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                      isSelected
+                        ? 'bg-amber-500 text-neutral-950 shadow-xs scale-105'
+                        : 'bg-white text-neutral-700 hover:bg-neutral-100 border border-neutral-200'
+                    }`}
+                  >
+                    {c.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {viewMode === 'list' ? (
+              /* CATEGORY-WISE LIST OF DISH ITEMS */
+              <div className="space-y-10">
+                {categoryWiseMenu.map((group) => (
+                  <div key={group.categoryName} className="space-y-4">
+                    {/* Category Header */}
+                    <div className="flex items-center justify-between border-b-2 border-amber-500/30 pb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 rounded-lg bg-amber-500 text-neutral-950 flex items-center justify-center font-bold text-xs shadow-xs">
+                          {group.items.length}
                         </span>
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 group-hover:bg-amber-500 backdrop-blur-md flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-sm text-white">
-                          <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
+                        <div>
+                          <h3 className="text-xl font-bold text-neutral-900 tracking-tight">
+                            {group.categoryName}
+                          </h3>
+                          <span className="text-xs text-neutral-500 font-medium">
+                            {group.items.length} {group.items.length === 1 ? 'Dish' : 'Dishes'}
+                          </span>
                         </div>
                       </div>
                     </div>
-                  </motion.button>
-                )
-              })}
-            </div>
+
+                    {/* Dish Cards in this Category */}
+                    <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
+                      {group.items.map((item, index) => {
+                        const hasImg = Boolean(item.imageUrl || item.image);
+                        const imgUrl = item.imageUrl || item.image;
+                        return (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: index * 0.03 }}
+                            key={item.id} 
+                            className="bg-white rounded-2xl shadow-sm border border-neutral-200/80 p-4 hover:border-amber-400 hover:shadow-md transition-all cursor-pointer flex gap-3.5 items-center group relative overflow-hidden"
+                            onClick={() => setSelectedDish(item)}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start gap-2 mb-1">
+                                <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                                <h4 className="font-bold text-neutral-900 leading-snug group-hover:text-amber-700 transition-colors">
+                                  {item.name}
+                                </h4>
+                              </div>
+
+                              {item.isChefRecommendation && (
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                                  <Flame className="w-3 h-3" /> Chef Rec
+                                </span>
+                              )}
+
+                              {item.description && (
+                                <p className="text-neutral-500 text-xs leading-relaxed line-clamp-2 mb-2">
+                                  {item.description}
+                                </p>
+                              )}
+
+                              <span className="font-bold text-amber-700 text-sm block">
+                                {typeof item.price === 'string' && item.price.includes('/') 
+                                  ? item.price.split('/').map((p: string) => `₹${p}`).join('/') 
+                                  : `₹${item.price}`}
+                              </span>
+                            </div>
+
+                            {hasImg && (
+                              <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
+                                <img src={imgUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              </div>
+                            )}
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {categoryWiseMenu.length === 0 && (
+                  <div className="text-center py-16 bg-white rounded-2xl border border-neutral-200 text-neutral-500">
+                    <p className="text-base font-semibold text-neutral-800">No dishes found</p>
+                    <p className="text-xs text-neutral-400 mt-1">Try selecting another category or clear your search.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* CATEGORY TILES (IMAGE CARDS) */
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {kollamCategories.map((category, index) => {
+                  const itemCount = kollamMenu.filter(m => m.category === category.name).length;
+                  return (
+                    <motion.button
+                      key={category.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                      onClick={() => setActiveCategoryName(category.name)}
+                      className="bg-neutral-950 rounded-2xl shadow-md border border-neutral-800/80 hover:border-amber-400 p-5 flex flex-col justify-end text-left transition-all duration-300 group aspect-[4/3] sm:aspect-square relative overflow-hidden hover:shadow-xl hover:scale-[1.02]"
+                    >
+                      {/* Category culinary background image */}
+                      <div className="absolute inset-0 z-0">
+                        <img 
+                          src={category.imageUrl || category.image || COMMON_CATEGORY_BG} 
+                          alt={category.name} 
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-75" 
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30 group-hover:from-black/90 group-hover:via-black/50 transition-colors" />
+                      </div>
+
+                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-amber-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10" />
+                      
+                      {/* Category Name & Details displayed over image */}
+                      <div className="relative z-10 w-full flex flex-col justify-end">
+                        <h3 className="font-extrabold text-base sm:text-lg md:text-xl text-white mb-1.5 leading-snug group-hover:text-amber-300 transition-colors drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
+                          {category.name}
+                        </h3>
+                        
+                        <div className="flex items-center justify-between mt-1">
+                          <span className="text-neutral-300 text-xs font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
+                            {itemCount} {itemCount === 1 ? 'Dish' : 'Dishes'}
+                          </span>
+                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 group-hover:bg-amber-500 backdrop-blur-md flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-sm text-white">
+                            <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.button>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -216,21 +216,42 @@ export default function BranchManager() {
     }
   };
 
-  // Filtered menu items for table display
-  const filteredMenuItems = useMemo(() => {
-    let list = [...menuItems];
+  // Arrange all dishes in a clean category-wise list
+  const categoryWiseMenu = useMemo(() => {
+    let catList: string[] = [];
     if (selectedCategoryFilter !== 'All') {
-      list = list.filter(item => item.category === selectedCategoryFilter);
+      catList = [selectedCategoryFilter];
+    } else {
+      const knownNames = new Set(categories.map(c => c.name));
+      catList = categories.map(c => c.name);
+      menuItems.forEach(item => {
+        if (item.category && !knownNames.has(item.category) && !catList.includes(item.category)) {
+          catList.push(item.category);
+        }
+      });
     }
-    // Sort by order ascending, then name
-    list.sort((a, b) => {
-      const orderA = typeof a.order === 'number' ? a.order : 9999;
-      const orderB = typeof b.order === 'number' ? b.order : 9999;
-      if (orderA !== orderB) return orderA - orderB;
-      return (a.name || '').localeCompare(b.name || '');
-    });
-    return list;
-  }, [menuItems, selectedCategoryFilter]);
+
+    return catList.map(catName => {
+      const items = menuItems
+        .filter(m => m.category === catName)
+        .sort((a, b) => {
+          const orderA = typeof a.order === 'number' ? a.order : 9999;
+          const orderB = typeof b.order === 'number' ? b.order : 9999;
+          if (orderA !== orderB) return orderA - orderB;
+          return (a.name || '').localeCompare(b.name || '');
+        });
+      const catObj = categories.find(c => c.name === catName);
+      return {
+        categoryName: catName,
+        categoryObj: catObj,
+        items
+      };
+    }).filter(group => selectedCategoryFilter !== 'All' || group.items.length > 0);
+  }, [categories, menuItems, selectedCategoryFilter]);
+
+  const totalFilteredCount = useMemo(() => {
+    return categoryWiseMenu.reduce((acc, g) => acc + g.items.length, 0);
+  }, [categoryWiseMenu]);
 
   // Reordering function within each category
   const handleMoveItem = async (itemToMove: any, direction: 'up' | 'down') => {
@@ -890,57 +911,95 @@ export default function BranchManager() {
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-xl font-bold text-neutral-900">Menu Items</h2>
-                  <p className="text-neutral-500 text-sm mt-0.5">Manage and reorder dishes for {branch.name}. Filter by category to adjust customer display order.</p>
+                  <h2 className="text-xl font-bold text-neutral-900">Menu Items (Category-Wise List)</h2>
+                  <p className="text-neutral-500 text-sm mt-0.5">Manage and reorder dishes for {branch.name} arranged in an organized category-wise list.</p>
                 </div>
               </div>
 
-              {/* Category Filter Dropdown & Reordering Controls */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-amber-50/70 border border-amber-200 p-4 rounded-xl mb-6 shadow-xs">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-amber-700" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-neutral-700">Filter Category:</span>
-                  </div>
-                  <select 
-                    value={selectedCategoryFilter} 
-                    onChange={e => {
-                      const val = e.target.value;
-                      setSelectedCategoryFilter(val);
-                      if (val !== 'All') {
-                        setNewMenuCategory(val);
-                      }
-                    }}
-                    className="bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-neutral-900 shadow-sm focus:ring-2 focus:ring-amber-500 outline-none"
-                  >
-                    <option value="All">All Categories ({menuItems.length} items)</option>
-                    {categories.map(c => {
-                      const count = menuItems.filter(m => m.category === c.name).length;
-                      return (
-                        <option key={c.id || c.name} value={c.name}>
-                          {c.name} ({count} {count === 1 ? 'item' : 'items'})
-                        </option>
-                      );
-                    })}
-                  </select>
-
-                  {selectedCategoryFilter !== 'All' && (
-                    <button
-                      onClick={() => setSelectedCategoryFilter('All')}
-                      className="text-xs font-medium text-amber-800 hover:text-amber-950 underline px-1"
+              {/* Category Filter Dropdown & Quick Selector Chips */}
+              <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-xl mb-6 shadow-xs space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Filter className="w-4 h-4 text-amber-700" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-neutral-700">Filter Category:</span>
+                    </div>
+                    <select 
+                      value={selectedCategoryFilter} 
+                      onChange={e => {
+                        const val = e.target.value;
+                        setSelectedCategoryFilter(val);
+                        if (val !== 'All') {
+                          setNewMenuCategory(val);
+                        }
+                      }}
+                      className="bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-neutral-900 shadow-sm focus:ring-2 focus:ring-amber-500 outline-none"
                     >
-                      Show All Categories
-                    </button>
-                  )}
+                      <option value="All">All Categories ({menuItems.length} items in {categories.length} categories)</option>
+                      {categories.map(c => {
+                        const count = menuItems.filter(m => m.category === c.name).length;
+                        return (
+                          <option key={c.id || c.name} value={c.name}>
+                            {c.name} ({count} {count === 1 ? 'dish' : 'dishes'})
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {selectedCategoryFilter !== 'All' && (
+                      <button
+                        onClick={() => setSelectedCategoryFilter('All')}
+                        className="text-xs font-medium text-amber-800 hover:text-amber-950 underline px-1"
+                      >
+                        Show All Categories
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="text-xs font-medium text-neutral-600 flex items-center gap-2">
+                    <span>Showing <strong>{totalFilteredCount}</strong> {totalFilteredCount === 1 ? 'dish' : 'dishes'} in <strong>{categoryWiseMenu.length}</strong> {categoryWiseMenu.length === 1 ? 'category' : 'categories'}</span>
+                    {reorderSaving && (
+                      <span className="text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded animate-pulse">
+                        Updating order...
+                      </span>
+                    )}
+                  </div>
                 </div>
 
-                <div className="text-xs font-medium text-neutral-600 flex items-center gap-2">
-                  <span>Showing <strong>{filteredMenuItems.length}</strong> {filteredMenuItems.length === 1 ? 'dish' : 'dishes'}</span>
-                  {reorderSaving && (
-                    <span className="text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded animate-pulse">
-                      Updating order...
-                    </span>
-                  )}
+                {/* Quick Category Jump / Filter Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-amber-200/60 pb-1 scrollbar-none">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedCategoryFilter('All')}
+                    className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                      selectedCategoryFilter === 'All'
+                        ? 'bg-neutral-900 text-white shadow-xs'
+                        : 'bg-white/80 text-neutral-700 hover:bg-white border border-amber-200/80'
+                    }`}
+                  >
+                    All Categories ({menuItems.length})
+                  </button>
+                  {categories.map(c => {
+                    const count = menuItems.filter(m => m.category === c.name).length;
+                    const isSelected = selectedCategoryFilter === c.name;
+                    return (
+                      <button
+                        key={c.id || c.name}
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategoryFilter(c.name);
+                          setNewMenuCategory(c.name);
+                        }}
+                        className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
+                          isSelected
+                            ? 'bg-amber-500 text-neutral-950 shadow-xs'
+                            : 'bg-white/80 text-neutral-700 hover:bg-white border border-amber-200/80'
+                        }`}
+                      >
+                        {c.name} ({count})
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
               
@@ -1051,158 +1110,206 @@ export default function BranchManager() {
               </div>
 
               {/* Notice explaining reordering */}
-              <div className="text-xs text-neutral-500 mb-3 flex items-center justify-between">
-                <span>💡 Use the <strong>▲</strong> and <strong>▼</strong> buttons in the <strong>Order</strong> column to arrange dish sequence in customer menus.</span>
+              <div className="text-xs text-neutral-500 mb-4 flex items-center justify-between">
+                <span>💡 Dishes are arranged in a <strong>category-wise list</strong>. Use the <strong>▲</strong> and <strong>▼</strong> buttons to adjust the sequence of dishes within each category.</span>
               </div>
 
-              <div className="border border-neutral-200 rounded-lg overflow-hidden">
-                <input type="file" accept="image/*" ref={menuFileInputRef} onChange={handleMenuImageUpload} className="hidden" />
-                <table className="w-full text-left text-sm">
-                  <thead className="bg-neutral-50 border-b border-neutral-200">
-                    <tr>
-                      <th className="px-3 py-3 font-semibold text-neutral-600 text-center w-20">Order</th>
-                      <th className="px-4 py-3 font-semibold text-neutral-600">Item & Description</th>
-                      <th className="px-4 py-3 font-semibold text-neutral-600">Type</th>
-                      <th className="px-4 py-3 font-semibold text-neutral-600">Price</th>
-                      <th className="px-4 py-3 font-semibold text-neutral-600">Category</th>
-                      <th className="px-4 py-3 text-center font-semibold text-neutral-600">Photo</th>
-                      <th className="px-4 py-3 text-right font-semibold text-neutral-600">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-neutral-200">
-                    {filteredMenuItems.map((item, idx) => {
-                      // Check if top or bottom within its category
-                      const itemsInThisCategory = filteredMenuItems.filter(m => m.category === item.category);
-                      const catIndex = itemsInThisCategory.findIndex(m => m.id === item.id);
-                      const isFirst = catIndex === 0;
-                      const isLast = catIndex === itemsInThisCategory.length - 1;
+              <input type="file" accept="image/*" ref={menuFileInputRef} onChange={handleMenuImageUpload} className="hidden" />
 
-                      return (
-                        <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
-                          <td className="px-3 py-3 text-center whitespace-nowrap">
-                            <div className="inline-flex items-center gap-0.5 bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
-                              <button
-                                type="button"
-                                onClick={() => handleMoveItem(item, 'up')}
-                                disabled={isFirst || reorderSaving}
-                                title={isFirst ? "At top of category" : "Move up"}
-                                className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
-                              >
-                                <ArrowUp className="w-3.5 h-3.5" />
-                              </button>
-                              <span className="text-[11px] font-bold text-neutral-700 px-1 min-w-[20px] text-center">
-                                {(item.order !== undefined && typeof item.order === 'number') ? item.order + 1 : idx + 1}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleMoveItem(item, 'down')}
-                                disabled={isLast || reorderSaving}
-                                title={isLast ? "At bottom of category" : "Move down"}
-                                className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
-                              >
-                                <ArrowDown className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 max-w-[280px]">
-                            <div className="flex items-start gap-2">
-                              <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
-                              <div className="min-w-0">
-                                <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
-                                  <span>{item.name}</span>
-                                  {item.isChefRecommendation && (
-                                    <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                                      <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
-                                    </span>
-                                  )}
-                                </div>
-                                {item.description ? (
-                                  <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
-                                    <span>{item.description}</span>
-                                    <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
-                                      <Edit3 className="w-3 h-3" />
-                                    </button>
-                                  </p>
-                                ) : (
-                                  <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
-                                    <Plus className="w-2.5 h-2.5" /> Add description
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <button
-                              onClick={() => toggleItemVeg(item)}
-                              title="Click to switch Veg / Non-Veg"
-                              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
-                                item.isVeg 
-                                  ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
-                                  : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
-                              }`}
-                            >
-                              <DietarySymbol isVeg={item.isVeg} size="sm" />
-                              <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
-                            </button>
-                          </td>
-                          <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
-                          <td className="px-4 py-3 text-neutral-600">{item.category}</td>
-                          <td className="px-4 py-3 text-center">
-                            {item.imageUrl ? (
-                              <div className="flex items-center justify-center gap-2">
-                                <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
-                                <button 
-                                  onClick={() => triggerMenuUpload(item.id)} 
-                                  disabled={uploadingMenuId === item.id}
-                                  className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
-                                >
-                                  {uploadingMenuId === item.id ? '...' : 'Change'}
-                                </button>
-                              </div>
-                            ) : (
-                              <button 
-                                onClick={() => triggerMenuUpload(item.id)} 
-                                disabled={uploadingMenuId === item.id} 
-                                className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
-                              >
-                                <Upload className="w-3 h-3" />
-                                {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-right whitespace-nowrap">
-                            <div className="flex items-center justify-end gap-2">
-                              <button 
-                                onClick={() => handleStartEdit(item)} 
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
-                                title="Edit item details"
-                              >
-                                <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
-                                <span>Edit</span>
-                              </button>
-                              <button 
-                                onClick={() => handleRemoveMenu(item.id)} 
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
-                                title="Delete item"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                <span>Delete</span>
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {filteredMenuItems.length === 0 && (
-                      <tr>
-                        <td colSpan={7} className="px-4 py-12 text-center text-neutral-500">
-                          <p className="text-sm font-medium">No menu items found in category "{selectedCategoryFilter}".</p>
-                          <p className="text-xs mt-1 text-neutral-400">Add an item above to populate this category.</p>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              {/* Category-Wise List of Menu Items */}
+              <div className="space-y-6">
+                {categoryWiseMenu.map((group) => {
+                  return (
+                    <div key={group.categoryName} className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                      {/* Category Header Bar */}
+                      <div className="bg-neutral-100/90 border-b border-neutral-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <span className="w-7 h-7 rounded-lg bg-amber-500 text-neutral-950 flex items-center justify-center font-bold text-xs shadow-xs">
+                            {group.items.length}
+                          </span>
+                          <div>
+                            <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
+                              <span>{group.categoryName}</span>
+                            </h3>
+                            <span className="text-xs text-neutral-500 font-medium">
+                              {group.items.length} {group.items.length === 1 ? 'dish' : 'dishes'} in this category
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewMenuCategory(group.categoryName);
+                              const nameInput = document.querySelector('input[placeholder="e.g. Asado Beef Steak"]') as HTMLInputElement | null;
+                              nameInput?.focus();
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-neutral-300 text-neutral-700 hover:text-amber-800 hover:border-amber-400 transition-colors shadow-2xs"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-amber-600" />
+                            <span>Add dish to {group.categoryName}</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Dishes Table for this Category */}
+                      {group.items.length > 0 ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <thead className="bg-neutral-50/70 border-b border-neutral-200 text-xs text-neutral-500 uppercase font-semibold">
+                              <tr>
+                                <th className="px-3 py-2.5 font-semibold text-neutral-600 text-center w-20">Order</th>
+                                <th className="px-4 py-2.5 font-semibold text-neutral-600">Item & Description</th>
+                                <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
+                                <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
+                                <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
+                                <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-neutral-200">
+                              {group.items.map((item, itemIdx) => {
+                                const isFirst = itemIdx === 0;
+                                const isLast = itemIdx === group.items.length - 1;
+
+                                return (
+                                  <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
+                                    <td className="px-3 py-3 text-center whitespace-nowrap">
+                                      <div className="inline-flex items-center gap-0.5 bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMoveItem(item, 'up')}
+                                          disabled={isFirst || reorderSaving}
+                                          title={isFirst ? "At top of category" : "Move up"}
+                                          className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                                        >
+                                          <ArrowUp className="w-3.5 h-3.5" />
+                                        </button>
+                                        <span className="text-[11px] font-bold text-neutral-700 px-1 min-w-[20px] text-center">
+                                          {itemIdx + 1}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleMoveItem(item, 'down')}
+                                          disabled={isLast || reorderSaving}
+                                          title={isLast ? "At bottom of category" : "Move down"}
+                                          className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                                        >
+                                          <ArrowDown className="w-3.5 h-3.5" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3 max-w-[280px]">
+                                      <div className="flex items-start gap-2">
+                                        <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                                        <div className="min-w-0">
+                                          <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
+                                            <span>{item.name}</span>
+                                            {item.isChefRecommendation && (
+                                              <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                                <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                              </span>
+                                            )}
+                                          </div>
+                                          {item.description ? (
+                                            <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
+                                              <span>{item.description}</span>
+                                              <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
+                                                <Edit3 className="w-3 h-3" />
+                                              </button>
+                                            </p>
+                                          ) : (
+                                            <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
+                                              <Plus className="w-2.5 h-2.5" /> Add description
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <button
+                                        onClick={() => toggleItemVeg(item)}
+                                        title="Click to switch Veg / Non-Veg"
+                                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                          item.isVeg 
+                                            ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                                            : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                                        }`}
+                                      >
+                                        <DietarySymbol isVeg={item.isVeg} size="sm" />
+                                        <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
+                                      </button>
+                                    </td>
+                                    <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
+                                    <td className="px-4 py-3 text-center">
+                                      {item.imageUrl ? (
+                                        <div className="flex items-center justify-center gap-2">
+                                          <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
+                                          <button 
+                                            onClick={() => triggerMenuUpload(item.id)} 
+                                            disabled={uploadingMenuId === item.id}
+                                            className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                                          >
+                                            {uploadingMenuId === item.id ? '...' : 'Change'}
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button 
+                                          onClick={() => triggerMenuUpload(item.id)} 
+                                          disabled={uploadingMenuId === item.id} 
+                                          className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
+                                        >
+                                          <Upload className="w-3 h-3" />
+                                          {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
+                                        </button>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                                      <div className="flex items-center justify-end gap-2">
+                                        <button 
+                                          onClick={() => handleStartEdit(item)} 
+                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                                          title="Edit item details"
+                                        >
+                                          <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                                          <span>Edit</span>
+                                        </button>
+                                        <button 
+                                          onClick={() => handleRemoveMenu(item.id)} 
+                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                                          title="Delete item"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="px-4 py-10 text-center text-neutral-500 bg-neutral-50/50">
+                          <p className="text-sm font-medium">No dishes in category "{group.categoryName}" yet.</p>
+                          <p className="text-xs text-neutral-400 mt-1">Use the "Add dish to {group.categoryName}" button to add the first item.</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {categoryWiseMenu.length === 0 && (
+                  <div className="border border-neutral-200 rounded-xl p-12 text-center text-neutral-500 bg-white">
+                    <p className="text-base font-semibold text-neutral-800">No dishes found</p>
+                    <p className="text-sm text-neutral-500 mt-1">
+                      {selectedCategoryFilter !== 'All' 
+                        ? `No items found in category "${selectedCategoryFilter}". Add an item using the form above.`
+                        : "No dishes added to this branch yet. Add your first dish using the form above."}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
