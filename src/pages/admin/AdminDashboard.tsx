@@ -72,7 +72,7 @@ export default function AdminDashboard() {
     : allBanners.filter(b => b.branchSlug === 'all' || b.branchSlug === selectedBranchFilter);
 
   return (
-    <div className="max-w-5xl">
+    <div className="w-full">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-neutral-900 mb-2">Welcome Back, Admin</h1>
         <p className="text-neutral-500">Manage promotions, offers, and menus across all Asado branches.</p>

@@ -1,8 +1,8 @@
 import React, { useMemo } from "react";
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
 import { useState, useEffect, useRef } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -693,40 +693,70 @@ export default function BranchManager() {
   };
 
     return (
-    <div className="max-w-5xl">
-      <div className="mb-8 flex items-center justify-between">
+    <div className="w-full">
+      {/* Branch Header & Live Link */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-neutral-900 mb-2">Manage {branch.name}</h1>
-          <p className="text-neutral-500">Update content specifically for the {branch.name} branch.</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-600">Branch Management</span>
+            <span className="text-neutral-300">•</span>
+            <span className="text-xs text-neutral-500">{branch.city}</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-neutral-900 tracking-tight">Manage {branch.name}</h1>
+          <p className="text-neutral-500 text-sm mt-0.5">Update promotional banners, dishes, categories, and branch details.</p>
         </div>
-        <div className="bg-white border border-neutral-200 px-4 py-2 rounded-lg text-sm font-medium">
-          Status: {branch.status === 'active' ? <span className="text-green-600">Active</span> : <span className="text-amber-600">Coming Soon</span>}
+
+        <div className="flex items-center gap-3 self-start sm:self-auto">
+          <Link
+            to={`/${branch.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white border border-neutral-200 text-neutral-700 hover:text-amber-800 hover:border-amber-300 transition-colors shadow-2xs"
+          >
+            <span>Preview Live Menu</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </Link>
+          <div className="bg-white border border-neutral-200 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-2xs flex items-center gap-1.5">
+            <span className="text-neutral-500">Status:</span>
+            {branch.status === 'active' ? (
+              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span> Active
+              </span>
+            ) : (
+              <span className="text-amber-700 font-bold flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span> Coming Soon
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="flex gap-8 items-start">
-        {/* Vertical Tabs */}
-        <div className="w-64 shrink-0 space-y-1">
-          {tabs.map(tab => {
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors text-left",
-                  activeTab === tab.id ? "bg-white border border-neutral-200 shadow-sm text-neutral-900" : "text-neutral-600 hover:bg-neutral-200/50"
-                )}
-              >
-                <Icon className={cn("w-4 h-4", activeTab === tab.id ? "text-amber-600" : "text-neutral-400")} />
-                {tab.name}
-              </button>
-            )
-          })}
-        </div>
+      {/* Horizontal Branch Tab Navigation Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none border-b border-neutral-200">
+        {tabs.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all shadow-2xs cursor-pointer",
+                isActive 
+                  ? "bg-neutral-900 text-white shadow-xs scale-[1.01]" 
+                  : "bg-white text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50 border border-neutral-200"
+              )}
+            >
+              <Icon className={cn("w-4 h-4", isActive ? "text-amber-400" : "text-neutral-400")} />
+              <span>{tab.name}</span>
+            </button>
+          );
+        })}
+      </div>
 
-        {/* Tab Content Area */}
-        <div className="flex-1 bg-white border border-neutral-200 rounded-2xl p-8 min-h-[500px]">
+      {/* Tab Content Area - Responsive padding and full available width */}
+      <div className="w-full bg-white border border-neutral-200 rounded-2xl p-4 sm:p-6 lg:p-8 min-h-[500px] shadow-xs">
           {activeTab === 'offers' && (
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -1609,7 +1639,6 @@ export default function BranchManager() {
             </div>
           )}
         </div>
-      </div>
 
       {/* Edit Menu Item Modal */}
       <AnimatePresence>

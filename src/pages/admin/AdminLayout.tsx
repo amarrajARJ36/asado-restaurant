@@ -1,93 +1,306 @@
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { branches } from '../../data';
-import { LayoutDashboard, Store, LogOut, Search, Bell } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  Store, 
+  LogOut, 
+  Bell, 
+  ChevronDown, 
+  Menu, 
+  X, 
+  ExternalLink, 
+  Check, 
+  UtensilsCrossed
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 
 export default function AdminLayout() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [branchesOpen, setBranchesOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const branchesDropdownRef = useRef<HTMLDivElement>(null);
+
+  const isOverviewActive = location.pathname === '/admin';
+  const isBranchActive = location.pathname.includes('/admin/branch');
+  const currentBranch = branches.find(b => location.pathname.includes(`/admin/branch/${b.slug}`));
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (branchesDropdownRef.current && !branchesDropdownRef.current.contains(event.target as Node)) {
+        setBranchesOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close menus on route navigation
+  useEffect(() => {
+    setMobileMenuOpen(false);
+    setBranchesOpen(false);
+  }, [location.pathname]);
+
+  const handleLogout = () => {
+    if (confirm("Are you sure you want to log out of the admin panel?")) {
+      navigate('/');
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-neutral-100 text-neutral-900 flex">
+    <div className="min-h-screen bg-neutral-100 text-neutral-900 flex flex-col w-full overflow-x-hidden">
       
-      {/* Sidebar */}
-      <aside className="w-64 bg-white border-r border-neutral-200 flex flex-col shrink-0">
-        <div className="h-16 flex items-center px-6 border-b border-neutral-200">
-          <Link to="/admin" className="font-bold text-xl uppercase tracking-tight text-neutral-900">
-            Asado Admin
-          </Link>
-        </div>
-        
-        <nav className="flex-1 p-4 space-y-8 overflow-y-auto">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3 px-3">Overview</div>
-            <Link 
-              to="/admin" 
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                location.pathname === '/admin' ? "bg-amber-50 text-amber-900" : "text-neutral-600 hover:bg-neutral-50"
-              )}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              Dashboard
-            </Link>
-          </div>
-          
-          <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-neutral-400 mb-3 px-3">Branches</div>
-            <div className="space-y-1">
-              {branches.map(branch => (
+      {/* Top Navigation Bar with Menu Buttons */}
+      <header className="sticky top-0 z-40 bg-white border-b border-neutral-200 shadow-2xs">
+        <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="h-16 flex items-center justify-between gap-4">
+            
+            {/* Brand Logo & Desktop Menu Buttons */}
+            <div className="flex items-center gap-4 sm:gap-6 lg:gap-8">
+              <Link to="/admin" className="flex items-center gap-2.5 shrink-0 group">
+                <div className="w-9 h-9 rounded-xl bg-neutral-900 text-amber-500 flex items-center justify-center font-bold text-base shadow-xs group-hover:bg-amber-500 group-hover:text-neutral-950 transition-colors">
+                  <UtensilsCrossed className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="font-extrabold text-lg uppercase tracking-tight text-neutral-900 block leading-tight">
+                    Asado Admin
+                  </span>
+                  <span className="text-[10px] uppercase font-bold tracking-widest text-amber-600 block">
+                    Management Portal
+                  </span>
+                </div>
+              </Link>
+
+              {/* Menu Buttons: Overview & Branches */}
+              <nav className="hidden md:flex items-center gap-2.5">
+                {/* 1. OVERVIEW MENU BUTTON */}
                 <Link 
-                  key={branch.id}
-                  to={`/admin/branch/${branch.slug}`}
+                  to="/admin" 
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                    location.pathname.includes(`/admin/branch/${branch.slug}`) ? "bg-amber-50 text-amber-900" : "text-neutral-600 hover:bg-neutral-50"
+                    "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer shadow-2xs",
+                    isOverviewActive 
+                      ? "bg-neutral-900 text-white shadow-xs" 
+                      : "bg-neutral-50 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950 border border-neutral-200"
                   )}
                 >
-                  <Store className="w-4 h-4" />
-                  {branch.name}
+                  <LayoutDashboard className={cn("w-4 h-4", isOverviewActive ? "text-amber-400" : "text-neutral-500")} />
+                  <span>Overview</span>
                 </Link>
-              ))}
-            </div>
-          </div>
-        </nav>
-        
-        <div className="p-4 border-t border-neutral-200">
-          <button className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors">
-            <LogOut className="w-4 h-4" />
-            Logout
-          </button>
-        </div>
-      </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header */}
-        <header className="h-16 bg-white border-b border-neutral-200 flex items-center justify-between px-8 shrink-0">
-          <div className="relative w-64">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" />
-            <input 
-              type="text" 
-              placeholder="Search..." 
-              className="w-full pl-9 pr-4 py-2 bg-neutral-100 border border-neutral-200 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 outline-none"
-            />
-          </div>
-          <div className="flex items-center gap-4">
-            <button className="relative text-neutral-500 hover:text-neutral-700">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
-            </button>
-            <div className="w-8 h-8 bg-amber-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
-              A
+                {/* 2. BRANCHES MENU BUTTON */}
+                <div className="relative" ref={branchesDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setBranchesOpen(!branchesOpen)}
+                    className={cn(
+                      "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all shadow-2xs cursor-pointer",
+                      isBranchActive 
+                        ? "bg-amber-500 text-neutral-950 shadow-xs" 
+                        : "bg-neutral-50 text-neutral-700 hover:bg-neutral-100 hover:text-neutral-950 border border-neutral-200"
+                    )}
+                  >
+                    <Store className={cn("w-4 h-4", isBranchActive ? "text-neutral-950" : "text-amber-600")} />
+                    <span>{currentBranch ? `Branch: ${currentBranch.name}` : "Branches"}</span>
+                    <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", branchesOpen && "rotate-180")} />
+                  </button>
+
+                  {/* Branches Dropdown Menu */}
+                  {branchesOpen && (
+                    <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-neutral-200 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                      <div className="px-4 py-2 border-b border-neutral-100 flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">Select Branch</span>
+                        <span className="text-[11px] text-neutral-500 font-medium">{branches.length} locations</span>
+                      </div>
+
+                      <div className="py-1">
+                        {branches.map(branch => {
+                          const isCurrent = location.pathname.includes(`/admin/branch/${branch.slug}`);
+                          return (
+                            <Link
+                              key={branch.id}
+                              to={`/admin/branch/${branch.slug}`}
+                              onClick={() => setBranchesOpen(false)}
+                              className={cn(
+                                "flex items-center justify-between px-4 py-2.5 text-sm transition-colors",
+                                isCurrent 
+                                  ? "bg-amber-50 text-amber-950 font-bold" 
+                                  : "text-neutral-700 hover:bg-neutral-50"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className={cn(
+                                  "w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold",
+                                  isCurrent ? "bg-amber-500 text-neutral-950" : "bg-neutral-100 text-neutral-600"
+                                )}>
+                                  <Store className="w-3.5 h-3.5" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="truncate">{branch.name}</div>
+                                  <div className="text-[11px] text-neutral-400 font-normal">{branch.city}</div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={cn(
+                                  "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
+                                  branch.status === 'active' 
+                                    ? "bg-emerald-100 text-emerald-800" 
+                                    : "bg-amber-100 text-amber-800"
+                                )}>
+                                  {branch.status === 'active' ? 'Active' : 'Soon'}
+                                </span>
+                                {isCurrent && <Check className="w-4 h-4 text-amber-600" />}
+                              </div>
+                            </Link>
+                          );
+                        })}
+                      </div>
+
+                      <div className="pt-2 px-3 pb-1 border-t border-neutral-100">
+                        <Link
+                          to="/admin"
+                          onClick={() => setBranchesOpen(false)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 text-xs font-semibold text-neutral-600 hover:text-amber-800 hover:bg-amber-50 rounded-xl transition-colors"
+                        >
+                          <LayoutDashboard className="w-3.5 h-3.5" />
+                          <span>View Overview & All Branches</span>
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </nav>
+            </div>
+
+            {/* Right Side Actions */}
+            <div className="flex items-center gap-3">
+              {/* Preview Live Site */}
+              <Link 
+                to={currentBranch ? `/${currentBranch.slug}` : "/"} 
+                target="_blank"
+                rel="noreferrer"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-50 hover:bg-amber-50 border border-neutral-200 transition-colors shadow-2xs"
+                title="Preview live customer site"
+              >
+                <span>Live Site</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </Link>
+
+              {/* Notification Bell */}
+              <button 
+                type="button"
+                className="relative p-2 text-neutral-500 hover:text-neutral-900 rounded-xl hover:bg-neutral-100 transition-colors"
+                title="Notifications"
+              >
+                <Bell className="w-4 h-4" />
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full"></span>
+              </button>
+
+              {/* Admin Avatar & Logout */}
+              <div className="flex items-center gap-2 pl-2 border-l border-neutral-200">
+                <div className="w-8 h-8 rounded-full bg-amber-500 text-neutral-950 font-extrabold text-xs flex items-center justify-center shadow-xs">
+                  AD
+                </div>
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-red-600 hover:text-red-800 hover:bg-red-50 transition-colors"
+                  title="Log out of Admin"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Logout</span>
+                </button>
+              </div>
+
+              {/* Mobile Menu Hamburger */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="md:hidden p-2 rounded-xl text-neutral-700 hover:bg-neutral-100 border border-neutral-200 cursor-pointer"
+                aria-label="Toggle navigation menu"
+              >
+                {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              </button>
             </div>
           </div>
-        </header>
-        
-        {/* Page Content */}
-        <main className="flex-1 overflow-y-auto p-8">
-          <Outlet />
-        </main>
-      </div>
+        </div>
+
+        {/* Mobile Slide-down Navigation Menu */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-neutral-200 bg-white px-4 py-4 space-y-4 shadow-lg animate-in slide-in-from-top-2 duration-150">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-2 px-1">Navigation</div>
+              <div className="space-y-1">
+                <Link
+                  to="/admin"
+                  className={cn(
+                    "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-colors",
+                    isOverviewActive ? "bg-neutral-900 text-white" : "text-neutral-700 hover:bg-neutral-50"
+                  )}
+                >
+                  <LayoutDashboard className="w-4 h-4 text-amber-500" />
+                  <span>Overview Dashboard</span>
+                </Link>
+              </div>
+            </div>
+
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 mb-2 px-1">Branches</div>
+              <div className="space-y-1">
+                {branches.map(branch => {
+                  const isCurrent = location.pathname.includes(`/admin/branch/${branch.slug}`);
+                  return (
+                    <Link
+                      key={branch.id}
+                      to={`/admin/branch/${branch.slug}`}
+                      className={cn(
+                        "flex items-center justify-between px-3.5 py-2 rounded-xl text-sm font-medium transition-colors",
+                        isCurrent ? "bg-amber-500 text-neutral-950 font-bold" : "text-neutral-700 hover:bg-neutral-50"
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <Store className="w-4 h-4" />
+                        <span>{branch.name}</span>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-black/10">
+                        {branch.status === 'active' ? 'Active' : 'Soon'}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-neutral-100 flex items-center justify-between">
+              <Link
+                to={currentBranch ? `/${currentBranch.slug}` : "/"}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-semibold text-neutral-700 hover:text-amber-800 flex items-center gap-1.5 py-1.5"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                <span>Visit Live Customer Menu</span>
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="text-xs font-semibold text-red-600 hover:text-red-800 flex items-center gap-1 py-1.5"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Logout</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Page Content - Full width max-w-7xl, responsive padding, fits properly without dragging */}
+      <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 min-w-0">
+        <Outlet />
+      </main>
       
     </div>
   );
