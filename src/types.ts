@@ -18,12 +18,17 @@ export interface Category {
 
 export interface FoodItem {
   id: string;
-  branch_id: string;
-  category_id: string;
+  branch_id?: string;
+  category_id?: string;
+  category?: string;
+  branchSlug?: string;
   name: string;
   price: number | string;
   description: string;
   image?: string;
+  imageUrl?: string;
   isVeg: boolean;
   isChefRecommendation: boolean;
+  order?: number;
+  status?: string;
 }

@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useParams, Link } from 'react-router-dom';
 import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
 import { useState, useEffect, useRef } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -10,6 +10,7 @@ import { compressImage } from '../../lib/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
 import { useBanners, Banner } from '../../hooks/useBanners';
+import { resolveItemCategory, normalizeMenuItems } from '../../lib/categoryUtils';
 
 export default function BranchManager() {
   const { branchId } = useParams();
@@ -30,8 +31,11 @@ export default function BranchManager() {
   const [bannerInitDone, setBannerInitDone] = useState(false);
   const [isSavingBanner, setIsSavingBanner] = useState(false);
 
-  // Menu Category Filter & Reordering State
+  // Menu Category Filter, Search, View Mode & Reordering State
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
+  const [menuSearchQuery, setMenuSearchQuery] = useState('');
+  const [menuViewMode, setMenuViewMode] = useState<'grouped' | 'table'>('grouped');
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [reorderSaving, setReorderSaving] = useState(false);
 
   // Gallery State
@@ -40,9 +44,23 @@ export default function BranchManager() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  const baseItems = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
-  const baseCategories = branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
-  const [menuItems, setMenuItems] = useState<any[]>(baseItems);
+  const rawBaseItems = useMemo(() => {
+    return branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
+  }, [branchId]);
+
+  const rawBaseCategories = useMemo(() => {
+    return branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
+  }, [branchId]);
+
+  const [categories, setCategories] = useState<any[]>(() => {
+    return branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
+  });
+
+  const [menuItems, setMenuItems] = useState<any[]>(() => {
+    const raw = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
+    const cats = branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
+    return normalizeMenuItems(raw, cats);
+  });
   const menuFileInputRef = useRef<HTMLInputElement>(null);
   const newMenuFileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +90,6 @@ export default function BranchManager() {
 
   const DEFAULT_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1200&auto=format&fit=crop";
 
-  const [categories, setCategories] = useState<any[]>(baseCategories);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryImage, setNewCategoryImage] = useState('');
   const [compressingNewCatImage, setCompressingNewCatImage] = useState(false);
@@ -107,16 +124,17 @@ export default function BranchManager() {
     const qMenu = query(collection(db, 'menuItems'), where('branchSlug', '==', branchId));
     const unsubMenu = onSnapshot(qMenu, (snapshot) => {
       const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const currentCats = categories.length > 0 ? categories : rawBaseCategories;
       if (dbItems.length === 0) {
-        setMenuItems(baseItems);
+        setMenuItems(normalizeMenuItems(rawBaseItems, currentCats));
       } else {
         const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
-        const merged = baseItems.map((staticItem: any) => dbItemMap.get(staticItem.id) || staticItem);
-        const existingIds = new Set(baseItems.map((i: any) => i.id));
+        const merged = rawBaseItems.map((staticItem: any) => dbItemMap.get(staticItem.id) || staticItem);
+        const existingIds = new Set(rawBaseItems.map((i: any) => i.id));
         dbItems.forEach((item: any) => {
           if (!existingIds.has(item.id)) merged.push(item);
         });
-        setMenuItems(merged);
+        setMenuItems(normalizeMenuItems(merged, currentCats));
       }
     });
 
@@ -124,11 +142,11 @@ export default function BranchManager() {
     const unsubCat = onSnapshot(qCat, (snapshot) => {
       const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       if (dbCats.length === 0) {
-        setCategories(baseCategories);
+        setCategories(rawBaseCategories);
       } else {
         const dbCatMap = new Map(dbCats.map((c: any) => [c.id, c]));
-        const merged = baseCategories.map((sc: any) => dbCatMap.get(sc.id) || sc);
-        const existingIds = new Set(baseCategories.map((c: any) => c.id));
+        const merged = rawBaseCategories.map((sc: any) => dbCatMap.get(sc.id) || sc);
+        const existingIds = new Set(rawBaseCategories.map((c: any) => c.id));
         dbCats.forEach((c: any) => {
           if (!existingIds.has(c.id)) merged.push(c);
         });
@@ -137,7 +155,7 @@ export default function BranchManager() {
     });
   
     return () => { unsubscribe(); unsubMenu(); unsubCat(); };
-  }, [branchId]);
+  }, [branchId, rawBaseItems, rawBaseCategories]);
 
   // Sync banner state for this branch
   useEffect(() => {
@@ -216,7 +234,12 @@ export default function BranchManager() {
     }
   };
 
-  // Arrange all dishes in a clean category-wise list
+  // Normalized list of all menu items ensuring every item has resolved human category name
+  const normalizedMenuItems = useMemo(() => {
+    return normalizeMenuItems(menuItems, categories);
+  }, [menuItems, categories]);
+
+  // Arrange all dishes in a clean category-wise list with real-time search & filter
   const categoryWiseMenu = useMemo(() => {
     let catList: string[] = [];
     if (selectedCategoryFilter !== 'All') {
@@ -224,41 +247,83 @@ export default function BranchManager() {
     } else {
       const knownNames = new Set(categories.map(c => c.name));
       catList = categories.map(c => c.name);
-      menuItems.forEach(item => {
+      normalizedMenuItems.forEach(item => {
         if (item.category && !knownNames.has(item.category) && !catList.includes(item.category)) {
           catList.push(item.category);
         }
       });
     }
 
+    const queryText = menuSearchQuery.trim().toLowerCase();
+
     return catList.map(catName => {
-      const items = menuItems
-        .filter(m => m.category === catName)
-        .sort((a, b) => {
-          const orderA = typeof a.order === 'number' ? a.order : 9999;
-          const orderB = typeof b.order === 'number' ? b.order : 9999;
-          if (orderA !== orderB) return orderA - orderB;
-          return (a.name || '').localeCompare(b.name || '');
-        });
+      let items = normalizedMenuItems.filter(m => m.category === catName);
+
+      if (queryText) {
+        items = items.filter(m => 
+          (m.name && m.name.toLowerCase().includes(queryText)) ||
+          (m.description && m.description.toLowerCase().includes(queryText)) ||
+          (m.price && String(m.price).toLowerCase().includes(queryText)) ||
+          (m.category && m.category.toLowerCase().includes(queryText))
+        );
+      }
+
+      items.sort((a, b) => {
+        const orderA = typeof a.order === 'number' ? a.order : 9999;
+        const orderB = typeof b.order === 'number' ? b.order : 9999;
+        if (orderA !== orderB) return orderA - orderB;
+        return (a.name || '').localeCompare(b.name || '');
+      });
+
       const catObj = categories.find(c => c.name === catName);
       return {
         categoryName: catName,
         categoryObj: catObj,
         items
       };
-    }).filter(group => selectedCategoryFilter !== 'All' || group.items.length > 0);
-  }, [categories, menuItems, selectedCategoryFilter]);
+    }).filter(group => {
+      // When a single category is selected, keep it visible even if 0 items to allow adding items
+      if (selectedCategoryFilter !== 'All') return true;
+      // In "All Categories" view, only show categories that contain matching items
+      return group.items.length > 0;
+    });
+  }, [categories, normalizedMenuItems, selectedCategoryFilter, menuSearchQuery]);
 
   const totalFilteredCount = useMemo(() => {
     return categoryWiseMenu.reduce((acc, g) => acc + g.items.length, 0);
   }, [categoryWiseMenu]);
+
+  // All matching dishes across all categories for continuous table view
+  const allFilteredDishes = useMemo(() => {
+    return categoryWiseMenu.flatMap(g => g.items);
+  }, [categoryWiseMenu]);
+
+  // Category collapse / expand helpers
+  const toggleCategoryCollapse = (catName: string) => {
+    setCollapsedCategories(prev => ({
+      ...prev,
+      [catName]: !prev[catName]
+    }));
+  };
+
+  const handleExpandAll = () => {
+    setCollapsedCategories({});
+  };
+
+  const handleCollapseAll = () => {
+    const allCollapsed: Record<string, boolean> = {};
+    categoryWiseMenu.forEach(g => {
+      allCollapsed[g.categoryName] = true;
+    });
+    setCollapsedCategories(allCollapsed);
+  };
 
   // Reordering function within each category
   const handleMoveItem = async (itemToMove: any, direction: 'up' | 'down') => {
     if (reorderSaving) return;
     const catName = itemToMove.category;
     // Get all items in this category in current order
-    const catItems = menuItems
+    const catItems = normalizedMenuItems
       .filter(m => m.category === catName)
       .sort((a, b) => {
         const orderA = typeof a.order === 'number' ? a.order : 9999;
@@ -286,7 +351,7 @@ export default function BranchManager() {
     // Immediate optimistic update
     setMenuItems(prev => prev.map(m => {
       if (updatedMap.has(m.id)) {
-        return { ...m, order: updatedMap.get(m.id) };
+        return { ...m, order: updatedMap.get(m.id), category: catName };
       }
       return m;
     }));
@@ -299,7 +364,7 @@ export default function BranchManager() {
           order: index,
           name: item.name,
           price: item.price,
-          category: item.category,
+          category: catName,
           branchSlug: branchId,
           isVeg: Boolean(item.isVeg),
           isChefRecommendation: Boolean(item.isChefRecommendation),
@@ -939,16 +1004,67 @@ export default function BranchManager() {
 
           {activeTab === 'menu' && (
             <div>
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
                 <div>
-                  <h2 className="text-xl font-bold text-neutral-900">Menu Items (Category-Wise List)</h2>
-                  <p className="text-neutral-500 text-sm mt-0.5">Manage and reorder dishes for {branch.name} arranged in an organized category-wise list.</p>
+                  <h2 className="text-xl font-bold text-neutral-900">Menu Items ({normalizedMenuItems.length} Dishes)</h2>
+                  <p className="text-neutral-500 text-sm mt-0.5">Manage and reorder dishes for {branch.name} across all {categories.length} categories.</p>
+                </div>
+                
+                {/* View Mode Toggle */}
+                <div className="flex items-center gap-2 self-start sm:self-auto bg-neutral-100 p-1 rounded-xl border border-neutral-200 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setMenuViewMode('grouped')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                      menuViewMode === 'grouped'
+                        ? 'bg-white text-neutral-950 shadow-xs font-bold'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Category Sections ({categories.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMenuViewMode('table')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+                      menuViewMode === 'table'
+                        ? 'bg-white text-neutral-950 shadow-xs font-bold'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    <List className="w-3.5 h-3.5 text-amber-600" />
+                    <span>Master Table (All {normalizedMenuItems.length})</span>
+                  </button>
                 </div>
               </div>
 
               {/* Category Filter Dropdown & Quick Selector Chips */}
               <div className="bg-amber-50/70 border border-amber-200 p-4 rounded-xl mb-6 shadow-xs space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  {/* Real-time search */}
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-amber-700/60" />
+                    <input
+                      type="text"
+                      value={menuSearchQuery}
+                      onChange={e => setMenuSearchQuery(e.target.value)}
+                      placeholder="Search any dish name, category, price..."
+                      className="w-full pl-9 pr-8 py-1.5 bg-white border border-amber-300/80 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                    />
+                    {menuSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setMenuSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-neutral-400 hover:text-neutral-700 w-4 h-4 flex items-center justify-center rounded-full hover:bg-neutral-100"
+                        title="Clear search"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Category Dropdown Filter */}
                   <div className="flex items-center gap-3 flex-wrap">
                     <div className="flex items-center gap-2">
                       <Filter className="w-4 h-4 text-amber-700" />
@@ -965,9 +1081,9 @@ export default function BranchManager() {
                       }}
                       className="bg-white border border-neutral-300 rounded-lg px-3 py-1.5 text-sm font-semibold text-neutral-900 shadow-sm focus:ring-2 focus:ring-amber-500 outline-none"
                     >
-                      <option value="All">All Categories ({menuItems.length} items in {categories.length} categories)</option>
+                      <option value="All">All Categories ({normalizedMenuItems.length} dishes in {categories.length} categories)</option>
                       {categories.map(c => {
-                        const count = menuItems.filter(m => m.category === c.name).length;
+                        const count = normalizedMenuItems.filter(m => m.category === c.name).length;
                         return (
                           <option key={c.id || c.name} value={c.name}>
                             {c.name} ({count} {count === 1 ? 'dish' : 'dishes'})
@@ -981,19 +1097,46 @@ export default function BranchManager() {
                         onClick={() => setSelectedCategoryFilter('All')}
                         className="text-xs font-medium text-amber-800 hover:text-amber-950 underline px-1"
                       >
-                        Show All Categories
+                        Show All
                       </button>
                     )}
                   </div>
 
-                  <div className="text-xs font-medium text-neutral-600 flex items-center gap-2">
+                  {/* Expand / Collapse buttons when in grouped mode */}
+                  {menuViewMode === 'grouped' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleExpandAll}
+                        className="text-xs font-semibold text-neutral-700 hover:text-neutral-950 px-2.5 py-1 bg-white border border-amber-200 rounded-md shadow-2xs hover:bg-amber-100/50 transition-colors"
+                      >
+                        Expand All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCollapseAll}
+                        className="text-xs font-semibold text-neutral-700 hover:text-neutral-950 px-2.5 py-1 bg-white border border-amber-200 rounded-md shadow-2xs hover:bg-amber-100/50 transition-colors"
+                      >
+                        Collapse All
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-amber-200/60 text-xs text-neutral-600">
+                  <div>
                     <span>Showing <strong>{totalFilteredCount}</strong> {totalFilteredCount === 1 ? 'dish' : 'dishes'} in <strong>{categoryWiseMenu.length}</strong> {categoryWiseMenu.length === 1 ? 'category' : 'categories'}</span>
-                    {reorderSaving && (
-                      <span className="text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded animate-pulse">
-                        Updating order...
+                    {menuSearchQuery && (
+                      <span className="ml-2 text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded font-medium">
+                        Filtered by "{menuSearchQuery}"
                       </span>
                     )}
                   </div>
+                  {reorderSaving && (
+                    <span className="text-amber-700 font-bold bg-amber-100 px-2 py-0.5 rounded animate-pulse">
+                      Updating order...
+                    </span>
+                  )}
                 </div>
 
                 {/* Quick Category Jump / Filter Pills */}
@@ -1007,10 +1150,10 @@ export default function BranchManager() {
                         : 'bg-white/80 text-neutral-700 hover:bg-white border border-amber-200/80'
                     }`}
                   >
-                    All Categories ({menuItems.length})
+                    All Categories ({normalizedMenuItems.length})
                   </button>
                   {categories.map(c => {
-                    const count = menuItems.filter(m => m.category === c.name).length;
+                    const count = normalizedMenuItems.filter(m => m.category === c.name).length;
                     const isSelected = selectedCategoryFilter === c.name;
                     return (
                       <button
@@ -1146,201 +1289,384 @@ export default function BranchManager() {
 
               <input type="file" accept="image/*" ref={menuFileInputRef} onChange={handleMenuImageUpload} className="hidden" />
 
-              {/* Category-Wise List of Menu Items */}
-              <div className="space-y-6">
-                {categoryWiseMenu.map((group) => {
-                  return (
-                    <div key={group.categoryName} className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                      {/* Category Header Bar */}
-                      <div className="bg-neutral-100/90 border-b border-neutral-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <span className="w-7 h-7 rounded-lg bg-amber-500 text-neutral-950 flex items-center justify-center font-bold text-xs shadow-xs">
-                            {group.items.length}
-                          </span>
-                          <div>
-                            <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
-                              <span>{group.categoryName}</span>
-                            </h3>
-                            <span className="text-xs text-neutral-500 font-medium">
-                              {group.items.length} {group.items.length === 1 ? 'dish' : 'dishes'} in this category
+              {/* Category-Wise List / Master Table of Menu Items */}
+              {menuViewMode === 'table' ? (
+                /* Master Table Mode (All Dishes) */
+                <div className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                  <div className="bg-neutral-100/90 border-b border-neutral-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <List className="w-4 h-4 text-amber-600" />
+                      <h3 className="font-bold text-neutral-900 text-base">
+                        Master Dishes Table
+                      </h3>
+                      <span className="text-xs bg-amber-100 text-amber-900 font-semibold px-2.5 py-0.5 rounded-full border border-amber-200">
+                        {allFilteredDishes.length} {allFilteredDishes.length === 1 ? 'dish' : 'dishes'}
+                      </span>
+                    </div>
+                    {menuSearchQuery && (
+                      <span className="text-xs text-neutral-500">
+                        Filtering by: <strong className="text-neutral-800">"{menuSearchQuery}"</strong>
+                      </span>
+                    )}
+                  </div>
+
+                  {allFilteredDishes.length > 0 ? (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="bg-neutral-50/70 border-b border-neutral-200 text-xs text-neutral-500 uppercase font-semibold">
+                          <tr>
+                            <th className="px-3 py-2.5 font-semibold text-neutral-600 text-center w-14">#</th>
+                            <th className="px-3 py-2.5 font-semibold text-neutral-600 w-36">Category</th>
+                            <th className="px-4 py-2.5 font-semibold text-neutral-600">Item & Description</th>
+                            <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
+                            <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
+                            <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
+                            <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-200">
+                          {allFilteredDishes.map((item, itemIdx) => {
+                            return (
+                              <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
+                                <td className="px-3 py-3 text-center whitespace-nowrap text-xs font-semibold text-neutral-500">
+                                  {itemIdx + 1}
+                                </td>
+                                <td className="px-3 py-3 whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedCategoryFilter(item.category || 'All');
+                                    }}
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition-colors cursor-pointer"
+                                    title={`Filter by ${item.category}`}
+                                  >
+                                    <span>{item.category || 'Unassigned'}</span>
+                                  </button>
+                                </td>
+                                <td className="px-4 py-3 max-w-[280px]">
+                                  <div className="flex items-start gap-2">
+                                    <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                                    <div className="min-w-0">
+                                      <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
+                                        <span>{item.name}</span>
+                                        {item.isChefRecommendation && (
+                                          <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                            <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                          </span>
+                                        )}
+                                      </div>
+                                      {item.description ? (
+                                        <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
+                                          <span>{item.description}</span>
+                                          <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
+                                            <Edit3 className="w-3 h-3" />
+                                          </button>
+                                        </p>
+                                      ) : (
+                                        <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
+                                          <Plus className="w-2.5 h-2.5" /> Add description
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <button
+                                    onClick={() => toggleItemVeg(item)}
+                                    title="Click to switch Veg / Non-Veg"
+                                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                      item.isVeg 
+                                        ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                                        : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                                    }`}
+                                  >
+                                    <DietarySymbol isVeg={item.isVeg} size="sm" />
+                                    <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
+                                  </button>
+                                </td>
+                                <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
+                                <td className="px-4 py-3 text-center">
+                                  {item.imageUrl ? (
+                                    <div className="flex items-center justify-center gap-2">
+                                      <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
+                                      <button 
+                                        onClick={() => triggerMenuUpload(item.id)} 
+                                        disabled={uploadingMenuId === item.id}
+                                        className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                                      >
+                                        {uploadingMenuId === item.id ? '...' : 'Change'}
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button 
+                                      onClick={() => triggerMenuUpload(item.id)} 
+                                      disabled={uploadingMenuId === item.id} 
+                                      className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
+                                    >
+                                      <Upload className="w-3 h-3" />
+                                      {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
+                                    </button>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-right whitespace-nowrap">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <button 
+                                      onClick={() => handleStartEdit(item)} 
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                                      title="Edit item details"
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                                      <span>Edit</span>
+                                    </button>
+                                    <button 
+                                      onClick={() => handleRemoveMenu(item.id)} 
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                                      title="Delete item"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      <span>Delete</span>
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="p-12 text-center text-neutral-500">
+                      <p className="text-base font-semibold text-neutral-800">No dishes match your filter</p>
+                      {menuSearchQuery && (
+                        <button
+                          onClick={() => setMenuSearchQuery('')}
+                          className="mt-2 text-xs text-amber-700 hover:underline font-semibold"
+                        >
+                          Clear search filter
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Grouped by Category View */
+                <div className="space-y-4">
+                  {categoryWiseMenu.map((group) => {
+                    const isCollapsed = Boolean(collapsedCategories[group.categoryName]);
+
+                    return (
+                      <div key={group.categoryName} className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-xs">
+                        {/* Category Header Bar */}
+                        <div 
+                          className="bg-neutral-100/90 hover:bg-neutral-200/70 border-b border-neutral-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none transition-colors"
+                          onClick={() => toggleCategoryCollapse(group.categoryName)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="text-neutral-500 hover:text-neutral-800">
+                              {isCollapsed ? (
+                                <ChevronRight className="w-4 h-4" />
+                              ) : (
+                                <ChevronDown className="w-4 h-4" />
+                              )}
+                            </div>
+                            <span className="w-7 h-7 rounded-lg bg-amber-500 text-neutral-950 flex items-center justify-center font-bold text-xs shadow-xs">
+                              {group.items.length}
                             </span>
+                            <div>
+                              <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
+                                <span>{group.categoryName}</span>
+                              </h3>
+                              <span className="text-xs text-neutral-500 font-medium">
+                                {group.items.length} {group.items.length === 1 ? 'dish' : 'dishes'} in this category {isCollapsed && '(Click to expand)'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewMenuCategory(group.categoryName);
+                                const nameInput = document.querySelector('input[placeholder="e.g. Asado Beef Steak"]') as HTMLInputElement | null;
+                                nameInput?.focus();
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-neutral-300 text-neutral-700 hover:text-amber-800 hover:border-amber-400 transition-colors shadow-2xs"
+                            >
+                              <Plus className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Add dish to {group.categoryName}</span>
+                            </button>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setNewMenuCategory(group.categoryName);
-                              const nameInput = document.querySelector('input[placeholder="e.g. Asado Beef Steak"]') as HTMLInputElement | null;
-                              nameInput?.focus();
-                            }}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-neutral-300 text-neutral-700 hover:text-amber-800 hover:border-amber-400 transition-colors shadow-2xs"
-                          >
-                            <Plus className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Add dish to {group.categoryName}</span>
-                          </button>
-                        </div>
-                      </div>
+                        {/* Dishes Table for this Category */}
+                        {!isCollapsed && (
+                          group.items.length > 0 ? (
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-left text-sm">
+                                <thead className="bg-neutral-50/70 border-b border-neutral-200 text-xs text-neutral-500 uppercase font-semibold">
+                                  <tr>
+                                    <th className="px-3 py-2.5 font-semibold text-neutral-600 text-center w-20">Order</th>
+                                    <th className="px-4 py-2.5 font-semibold text-neutral-600">Item & Description</th>
+                                    <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
+                                    <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
+                                    <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
+                                    <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-neutral-200">
+                                  {group.items.map((item, itemIdx) => {
+                                    const isFirst = itemIdx === 0;
+                                    const isLast = itemIdx === group.items.length - 1;
 
-                      {/* Dishes Table for this Category */}
-                      {group.items.length > 0 ? (
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-sm">
-                            <thead className="bg-neutral-50/70 border-b border-neutral-200 text-xs text-neutral-500 uppercase font-semibold">
-                              <tr>
-                                <th className="px-3 py-2.5 font-semibold text-neutral-600 text-center w-20">Order</th>
-                                <th className="px-4 py-2.5 font-semibold text-neutral-600">Item & Description</th>
-                                <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
-                                <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
-                                <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
-                                <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-neutral-200">
-                              {group.items.map((item, itemIdx) => {
-                                const isFirst = itemIdx === 0;
-                                const isLast = itemIdx === group.items.length - 1;
-
-                                return (
-                                  <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
-                                    <td className="px-3 py-3 text-center whitespace-nowrap">
-                                      <div className="inline-flex items-center gap-0.5 bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
-                                        <button
-                                          type="button"
-                                          onClick={() => handleMoveItem(item, 'up')}
-                                          disabled={isFirst || reorderSaving}
-                                          title={isFirst ? "At top of category" : "Move up"}
-                                          className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
-                                        >
-                                          <ArrowUp className="w-3.5 h-3.5" />
-                                        </button>
-                                        <span className="text-[11px] font-bold text-neutral-700 px-1 min-w-[20px] text-center">
-                                          {itemIdx + 1}
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleMoveItem(item, 'down')}
-                                          disabled={isLast || reorderSaving}
-                                          title={isLast ? "At bottom of category" : "Move down"}
-                                          className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
-                                        >
-                                          <ArrowDown className="w-3.5 h-3.5" />
-                                        </button>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3 max-w-[280px]">
-                                      <div className="flex items-start gap-2">
-                                        <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
-                                        <div className="min-w-0">
-                                          <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
-                                            <span>{item.name}</span>
-                                            {item.isChefRecommendation && (
-                                              <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                                                <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
-                                              </span>
-                                            )}
+                                    return (
+                                      <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
+                                        <td className="px-3 py-3 text-center whitespace-nowrap">
+                                          <div className="inline-flex items-center gap-0.5 bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMoveItem(item, 'up')}
+                                              disabled={isFirst || reorderSaving}
+                                              title={isFirst ? "At top of category" : "Move up"}
+                                              className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                                            >
+                                              <ArrowUp className="w-3.5 h-3.5" />
+                                            </button>
+                                            <span className="text-[11px] font-bold text-neutral-700 px-1 min-w-[20px] text-center">
+                                              {itemIdx + 1}
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleMoveItem(item, 'down')}
+                                              disabled={isLast || reorderSaving}
+                                              title={isLast ? "At bottom of category" : "Move down"}
+                                              className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                                            >
+                                              <ArrowDown className="w-3.5 h-3.5" />
+                                            </button>
                                           </div>
-                                          {item.description ? (
-                                            <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
-                                              <span>{item.description}</span>
-                                              <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
-                                                <Edit3 className="w-3 h-3" />
+                                        </td>
+                                        <td className="px-4 py-3 max-w-[280px]">
+                                          <div className="flex items-start gap-2">
+                                            <DietarySymbol isVeg={item.isVeg} size="sm" className="mt-0.5" />
+                                            <div className="min-w-0">
+                                              <div className="font-semibold text-neutral-900 flex items-center gap-1.5 flex-wrap">
+                                                <span>{item.name}</span>
+                                                {item.isChefRecommendation && (
+                                                  <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                                    <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                                  </span>
+                                                )}
+                                              </div>
+                                              {item.description ? (
+                                                <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
+                                                  <span>{item.description}</span>
+                                                  <button onClick={() => handleEditDescription(item)} title="Edit description" className="text-neutral-400 hover:text-amber-600 shrink-0">
+                                                    <Edit3 className="w-3 h-3" />
+                                                  </button>
+                                                </p>
+                                              ) : (
+                                                <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
+                                                  <Plus className="w-2.5 h-2.5" /> Add description
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                          <button
+                                            onClick={() => toggleItemVeg(item)}
+                                            title="Click to switch Veg / Non-Veg"
+                                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
+                                              item.isVeg 
+                                                ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                                                : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                                            }`}
+                                          >
+                                            <DietarySymbol isVeg={item.isVeg} size="sm" />
+                                            <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
+                                          </button>
+                                        </td>
+                                        <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
+                                        <td className="px-4 py-3 text-center">
+                                          {item.imageUrl ? (
+                                            <div className="flex items-center justify-center gap-2">
+                                              <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
+                                              <button 
+                                                onClick={() => triggerMenuUpload(item.id)} 
+                                                disabled={uploadingMenuId === item.id}
+                                                className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                                              >
+                                                {uploadingMenuId === item.id ? '...' : 'Change'}
                                               </button>
-                                            </p>
+                                            </div>
                                           ) : (
-                                            <button onClick={() => handleEditDescription(item)} className="text-[11px] text-amber-600 hover:underline inline-flex items-center gap-1 mt-0.5">
-                                              <Plus className="w-2.5 h-2.5" /> Add description
+                                            <button 
+                                              onClick={() => triggerMenuUpload(item.id)} 
+                                              disabled={uploadingMenuId === item.id} 
+                                              className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
+                                            >
+                                              <Upload className="w-3 h-3" />
+                                              {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
                                             </button>
                                           )}
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                      <button
-                                        onClick={() => toggleItemVeg(item)}
-                                        title="Click to switch Veg / Non-Veg"
-                                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium border transition-colors ${
-                                          item.isVeg 
-                                            ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
-                                            : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
-                                        }`}
-                                      >
-                                        <DietarySymbol isVeg={item.isVeg} size="sm" />
-                                        <span>{item.isVeg ? 'Veg' : 'Non-Veg'}</span>
-                                      </button>
-                                    </td>
-                                    <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
-                                    <td className="px-4 py-3 text-center">
-                                      {item.imageUrl ? (
-                                        <div className="flex items-center justify-center gap-2">
-                                          <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
-                                          <button 
-                                            onClick={() => triggerMenuUpload(item.id)} 
-                                            disabled={uploadingMenuId === item.id}
-                                            className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
-                                          >
-                                            {uploadingMenuId === item.id ? '...' : 'Change'}
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <button 
-                                          onClick={() => triggerMenuUpload(item.id)} 
-                                          disabled={uploadingMenuId === item.id} 
-                                          className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
-                                        >
-                                          <Upload className="w-3 h-3" />
-                                          {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
-                                        </button>
-                                      )}
-                                    </td>
-                                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                                      <div className="flex items-center justify-end gap-2">
-                                        <button 
-                                          onClick={() => handleStartEdit(item)} 
-                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
-                                          title="Edit item details"
-                                        >
-                                          <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
-                                          <span>Edit</span>
-                                        </button>
-                                        <button 
-                                          onClick={() => handleRemoveMenu(item.id)} 
-                                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
-                                          title="Delete item"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                          <span>Delete</span>
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <div className="px-4 py-10 text-center text-neutral-500 bg-neutral-50/50">
-                          <p className="text-sm font-medium">No dishes in category "{group.categoryName}" yet.</p>
-                          <p className="text-xs text-neutral-400 mt-1">Use the "Add dish to {group.categoryName}" button to add the first item.</p>
-                        </div>
+                                        </td>
+                                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                                          <div className="flex items-center justify-end gap-2">
+                                            <button 
+                                              onClick={() => handleStartEdit(item)} 
+                                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                                              title="Edit item details"
+                                            >
+                                              <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
+                                              <span>Edit</span>
+                                            </button>
+                                            <button 
+                                              onClick={() => handleRemoveMenu(item.id)} 
+                                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
+                                              title="Delete item"
+                                            >
+                                              <Trash2 className="w-3.5 h-3.5" />
+                                              <span>Delete</span>
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          ) : (
+                            <div className="px-4 py-10 text-center text-neutral-500 bg-neutral-50/50">
+                              <p className="text-sm font-medium">No dishes in category "{group.categoryName}" yet.</p>
+                              <p className="text-xs text-neutral-400 mt-1">Use the "Add dish to {group.categoryName}" button to add the first item.</p>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {categoryWiseMenu.length === 0 && (
+                    <div className="border border-neutral-200 rounded-xl p-12 text-center text-neutral-500 bg-white">
+                      <p className="text-base font-semibold text-neutral-800">No dishes found</p>
+                      <p className="text-sm text-neutral-500 mt-1">
+                        {selectedCategoryFilter !== 'All' 
+                          ? `No items found in category "${selectedCategoryFilter}". Add an item using the form above.`
+                          : "No dishes added to this branch yet. Add your first dish using the form above."}
+                      </p>
+                      {menuSearchQuery && (
+                        <button
+                          onClick={() => setMenuSearchQuery('')}
+                          className="mt-3 text-xs text-amber-700 hover:underline font-semibold"
+                        >
+                          Clear search filter
+                        </button>
                       )}
                     </div>
-                  );
-                })}
-
-                {categoryWiseMenu.length === 0 && (
-                  <div className="border border-neutral-200 rounded-xl p-12 text-center text-neutral-500 bg-white">
-                    <p className="text-base font-semibold text-neutral-800">No dishes found</p>
-                    <p className="text-sm text-neutral-500 mt-1">
-                      {selectedCategoryFilter !== 'All' 
-                        ? `No items found in category "${selectedCategoryFilter}". Add an item using the form above.`
-                        : "No dishes added to this branch yet. Add your first dish using the form above."}
-                    </p>
-                  </div>
-                )}
-              </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
