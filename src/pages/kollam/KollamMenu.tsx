@@ -4,6 +4,7 @@ import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Search, Flame, ArrowRight, X, List, LayoutGrid, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { kollamMenu as staticKollamMenu, kollamCategories as staticKollamCategories } from '../../data';
+import { normalizeMenuItems } from '../../lib/categoryUtils';
 import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
 
@@ -14,7 +15,7 @@ export default function KollamMenu() {
   const [selectedDish, setSelectedDish] = useState<any | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
-  const [kollamMenu, setKollamMenu] = useState<any[]>(staticKollamMenu);
+  const [kollamMenu, setKollamMenu] = useState<any[]>(() => normalizeMenuItems(staticKollamMenu, staticKollamCategories));
   const [kollamCategories, setKollamCategories] = useState<any[]>(staticKollamCategories);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('All');
@@ -27,36 +28,71 @@ export default function KollamMenu() {
   }, []);
 
   useEffect(() => {
-    const unsubMenu = onSnapshot(query(collection(db, 'menuItems'), where('branchSlug', '==', 'kollam')), (snapshot) => {
-      if (!snapshot.empty) {
-        // Merge with static data, letting firestore items override by ID or name
-        const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setKollamMenu(prev => {
-          const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
-          const merged = staticKollamMenu.map(staticItem => dbItemMap.get(staticItem.id) || staticItem);
-          // Add any new items created in DB that aren't in static list
-          const existingIds = new Set(staticKollamMenu.map(i => i.id));
-          dbItems.forEach((item: any) => {
-            if (!existingIds.has(item.id)) merged.push(item);
-          });
-          return merged;
-        });
-      }
-    });
-    const unsubCat = onSnapshot(query(collection(db, 'categories'), where('branchSlug', '==', 'kollam')), (snapshot) => {
-      if (!snapshot.empty) {
+    let latestCategories: any[] = staticKollamCategories;
+    let latestRawItems: any[] = staticKollamMenu;
+
+    const unsubCat = onSnapshot(
+      query(collection(db, 'categories'), where('branchSlug', '==', 'kollam')),
+      (snapshot) => {
         const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setKollamCategories(() => {
-          const dbCatMap = new Map(dbCats.map((cat: any) => [cat.id, cat]));
-          const merged = staticKollamCategories.map(staticCat => dbCatMap.get(staticCat.id) || staticCat);
-          const existingIds = new Set(staticKollamCategories.map(c => c.id));
-          dbCats.forEach((cat: any) => {
-            if (!existingIds.has(cat.id)) merged.push(cat);
-          });
-          return merged;
+        const dbCatMap = new Map(dbCats.map((cat: any) => [cat.id, cat]));
+        const merged = staticKollamCategories.map((staticCat: any) => {
+          const dbCat = dbCatMap.get(staticCat.id);
+          return dbCat ? { ...staticCat, ...dbCat } : staticCat;
         });
+        const existingIds = new Set(staticKollamCategories.map(c => c.id));
+        dbCats.forEach((cat: any) => {
+          if (!existingIds.has(cat.id)) merged.push(cat);
+        });
+        const activeCats = merged.filter((cat: any) => cat.isDeleted !== true);
+        latestCategories = activeCats;
+        setKollamCategories(activeCats);
+        // Re-normalize current dishes with latest categories
+        setKollamMenu(normalizeMenuItems(latestRawItems, activeCats));
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'categories');
       }
-    });
+    );
+
+    const unsubMenu = onSnapshot(
+      query(collection(db, 'menuItems'), where('branchSlug', '==', 'kollam')),
+      (snapshot) => {
+        const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
+
+        // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
+        const merged = staticKollamMenu.map((staticItem: any) => {
+          const dbItem = dbItemMap.get(staticItem.id);
+          if (!dbItem) return { ...staticItem, isAvailable: staticItem.isAvailable !== false };
+          return {
+            ...staticItem,
+            ...dbItem,
+            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false)
+          };
+        });
+
+        // Add any custom items created in Firestore that aren't in static list
+        const existingIds = new Set(staticKollamMenu.map((i: any) => i.id));
+        dbItems.forEach((item: any) => {
+          if (!existingIds.has(item.id)) {
+            merged.push({
+              ...item,
+              isAvailable: item.isAvailable !== false
+            });
+          }
+        });
+
+        // Filter out soft-deleted and permanently purged items
+        const activeItems = merged.filter((item: any) => item.isDeleted !== true && item.isPurged !== true);
+        latestRawItems = activeItems;
+        setKollamMenu(normalizeMenuItems(activeItems, latestCategories));
+      },
+      (error) => {
+        handleFirestoreError(error, OperationType.LIST, 'menuItems');
+      }
+    );
+
     return () => { unsubMenu(); unsubCat(); };
   }, []);
   
@@ -217,6 +253,12 @@ export default function KollamMenu() {
                           </span>
                         )}
 
+                        {item.isAvailable === false && (
+                          <span className="inline-flex items-center gap-1 bg-neutral-200 text-neutral-700 border border-neutral-300 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                            Sold Out
+                          </span>
+                        )}
+
                         {item.description && (
                           <p className="text-neutral-500 text-xs leading-relaxed line-clamp-2 mb-2">
                             {item.description}
@@ -232,7 +274,12 @@ export default function KollamMenu() {
 
                       {hasImg && (
                         <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
-                          <img src={imgUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <img src={imgUrl} alt={item.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${item.isAvailable === false ? 'grayscale opacity-75' : ''}`} />
+                          {item.isAvailable === false && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <span className="text-[9px] font-bold text-white bg-black/75 px-1 py-0.5 rounded uppercase tracking-wider">Sold Out</span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </motion.div>
@@ -363,6 +410,12 @@ export default function KollamMenu() {
                                 </span>
                               )}
 
+                              {item.isAvailable === false && (
+                                <span className="inline-flex items-center gap-1 bg-neutral-200 text-neutral-700 border border-neutral-300 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                                  Sold Out
+                                </span>
+                              )}
+
                               {item.description && (
                                 <p className="text-neutral-500 text-xs leading-relaxed line-clamp-2 mb-2">
                                   {item.description}
@@ -378,7 +431,12 @@ export default function KollamMenu() {
 
                             {hasImg && (
                               <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
-                                <img src={imgUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                <img src={imgUrl} alt={item.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${item.isAvailable === false ? 'grayscale opacity-75' : ''}`} />
+                                {item.isAvailable === false && (
+                                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                                    <span className="text-[9px] font-bold text-white bg-black/75 px-1 py-0.5 rounded uppercase tracking-wider">Sold Out</span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </motion.div>
@@ -527,6 +585,12 @@ export default function KollamMenu() {
                           </span>
                         )}
 
+                        {item.isAvailable === false && (
+                          <span className="inline-flex items-center gap-1 bg-neutral-200 text-neutral-700 border border-neutral-300 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                            Sold Out
+                          </span>
+                        )}
+
                         {item.description && (
                           <p className="text-neutral-500 text-xs leading-relaxed line-clamp-2 mb-2">
                             {item.description}
@@ -542,7 +606,12 @@ export default function KollamMenu() {
 
                       {hasImg && (
                         <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
-                          <img src={imgUrl} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <img src={imgUrl} alt={item.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${item.isAvailable === false ? 'grayscale opacity-75' : ''}`} />
+                          {item.isAvailable === false && (
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                              <span className="text-[9px] font-bold text-white bg-black/75 px-1 py-0.5 rounded uppercase tracking-wider">Sold Out</span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </motion.div>
@@ -562,7 +631,7 @@ export default function KollamMenu() {
 
       {/* Dish Detail Popup Modal */}
       <DishDetailModal
-        dish={selectedDish}
+        dish={selectedDish ? (kollamMenu.find(d => d.id === selectedDish.id) || selectedDish) : null}
         onClose={() => setSelectedDish(null)}
         theme="amber"
       />

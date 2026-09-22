@@ -39,6 +39,10 @@
         "category": { "type": "string", "maxLength": 50 },
         "order": { "type": "number" },
         "status": { "type": "string", "maxLength": 20 },
+        "isAvailable": { "type": "boolean" },
+        "isDeleted": { "type": "boolean" },
+        "isPurged": { "type": "boolean" },
+        "deletedAt": { "type": "number" },
         "branchSlug": { "type": "string", "maxLength": 50 }
       },
       "required": ["name", "price", "category", "branchSlug"]
@@ -49,6 +53,8 @@
       "type": "object",
       "properties": {
         "name": { "type": "string", "maxLength": 50 },
+        "isDeleted": { "type": "boolean" },
+        "deletedAt": { "type": "number" },
         "branchSlug": { "type": "string", "maxLength": 50 }
       },
       "required": ["name", "branchSlug"]

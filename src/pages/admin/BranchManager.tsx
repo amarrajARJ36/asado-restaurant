@@ -33,10 +33,13 @@ export default function BranchManager() {
 
   // Menu Category Filter, Search, View Mode & Reordering State
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('All');
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'available' | 'unavailable'>('all');
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
   const [menuViewMode, setMenuViewMode] = useState<'grouped' | 'table'>('grouped');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [reorderSaving, setReorderSaving] = useState(false);
+  const [deletedItems, setDeletedItems] = useState<any[]>([]);
+  const [showTrashModal, setShowTrashModal] = useState(false);
 
   // Gallery State
   const [galleryImages, setGalleryImages] = useState<any[]>([]);
@@ -84,6 +87,7 @@ export default function BranchManager() {
     description: string;
     isVeg: boolean;
     isChefRecommendation: boolean;
+    isAvailable: boolean;
     imageUrl?: string;
   } | null>(null);
   const [compressingEditImage, setCompressingEditImage] = useState(false);
@@ -125,24 +129,53 @@ export default function BranchManager() {
     const unsubMenu = onSnapshot(qMenu, (snapshot) => {
       const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const currentCats = categories.length > 0 ? categories : rawBaseCategories;
-      if (dbItems.length === 0) {
-        setMenuItems(normalizeMenuItems(rawBaseItems, currentCats));
-      } else {
-        const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
-        const merged = rawBaseItems.map((staticItem: any) => dbItemMap.get(staticItem.id) || staticItem);
-        const existingIds = new Set(rawBaseItems.map((i: any) => i.id));
-        dbItems.forEach((item: any) => {
-          if (!existingIds.has(item.id)) merged.push(item);
-        });
-        setMenuItems(normalizeMenuItems(merged, currentCats));
-      }
+      const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
+
+      // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
+      const merged = rawBaseItems.map((staticItem: any) => {
+        const dbItem = dbItemMap.get(staticItem.id);
+        if (!dbItem) return { ...staticItem, isAvailable: staticItem.isAvailable !== false };
+        return {
+          ...staticItem,
+          ...dbItem,
+          isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false)
+        };
+      });
+
+      // Add custom items created in Firestore
+      const existingIds = new Set(rawBaseItems.map((i: any) => i.id));
+      dbItems.forEach((item: any) => {
+        if (!existingIds.has(item.id)) {
+          merged.push({
+            ...item,
+            isAvailable: item.isAvailable !== false
+          });
+        }
+      });
+
+      const activeList: any[] = [];
+      const deletedList: any[] = [];
+      merged.forEach((item: any) => {
+        if (item.isDeleted === true) {
+          if (!item.isPurged) {
+            deletedList.push(item);
+          }
+        } else {
+          activeList.push(item);
+        }
+      });
+
+      setMenuItems(normalizeMenuItems(activeList, currentCats));
+      setDeletedItems(normalizeMenuItems(deletedList, currentCats));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'menuItems');
     });
 
     const qCat = query(collection(db, 'categories'), where('branchSlug', '==', branchId));
     const unsubCat = onSnapshot(qCat, (snapshot) => {
       const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       if (dbCats.length === 0) {
-        setCategories(rawBaseCategories);
+        setCategories(rawBaseCategories.filter((c: any) => !c.isDeleted));
       } else {
         const dbCatMap = new Map(dbCats.map((c: any) => [c.id, c]));
         const merged = rawBaseCategories.map((sc: any) => dbCatMap.get(sc.id) || sc);
@@ -150,8 +183,10 @@ export default function BranchManager() {
         dbCats.forEach((c: any) => {
           if (!existingIds.has(c.id)) merged.push(c);
         });
-        setCategories(merged);
+        setCategories(merged.filter((c: any) => c.isDeleted !== true));
       }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'categories');
     });
   
     return () => { unsubscribe(); unsubMenu(); unsubCat(); };
@@ -259,6 +294,13 @@ export default function BranchManager() {
     return catList.map(catName => {
       let items = normalizedMenuItems.filter(m => m.category === catName);
 
+      // Filter by availability toggle
+      if (availabilityFilter === 'available') {
+        items = items.filter(m => m.isAvailable !== false);
+      } else if (availabilityFilter === 'unavailable') {
+        items = items.filter(m => m.isAvailable === false);
+      }
+
       if (queryText) {
         items = items.filter(m => 
           (m.name && m.name.toLowerCase().includes(queryText)) ||
@@ -287,7 +329,15 @@ export default function BranchManager() {
       // In "All Categories" view, only show categories that contain matching items
       return group.items.length > 0;
     });
-  }, [categories, normalizedMenuItems, selectedCategoryFilter, menuSearchQuery]);
+  }, [categories, normalizedMenuItems, selectedCategoryFilter, menuSearchQuery, availabilityFilter]);
+
+  const availableCount = useMemo(() => {
+    return normalizedMenuItems.filter(m => m.isAvailable !== false).length;
+  }, [normalizedMenuItems]);
+
+  const unavailableCount = useMemo(() => {
+    return normalizedMenuItems.filter(m => m.isAvailable === false).length;
+  }, [normalizedMenuItems]);
 
   const totalFilteredCount = useMemo(() => {
     return categoryWiseMenu.reduce((acc, g) => acc + g.items.length, 0);
@@ -477,10 +527,13 @@ export default function BranchManager() {
         description: newMenuDescription.trim(),
         isVeg: newMenuIsVeg,
         isChefRecommendation: newMenuIsChefRec,
+        isAvailable: true,
+        isDeleted: false,
         imageUrl: newMenuImage || null,
         order: catCount,
         status: 'active',
-        branchSlug: branchId
+        branchSlug: branchId,
+        createdAt: Date.now()
       });
       setNewMenuName('');
       setNewMenuPrice('');
@@ -493,9 +546,25 @@ export default function BranchManager() {
     }
   };
 
+  const toggleItemAvailability = async (item: any) => {
+    const currentStatus = item.isAvailable !== false;
+    const nextStatus = !currentStatus;
+    try {
+      await setDoc(doc(db, 'menuItems', item.id), {
+        isAvailable: nextStatus,
+        branchSlug: branchId,
+        updatedAt: Date.now()
+      }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isAvailable: nextStatus } : m));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
+    }
+  };
+
   const toggleItemVeg = async (item: any) => {
     try {
-      await setDoc(doc(db, 'menuItems', item.id), { isVeg: !item.isVeg }, { merge: true });
+      await setDoc(doc(db, 'menuItems', item.id), { isVeg: !item.isVeg, branchSlug: branchId }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isVeg: !item.isVeg } : m));
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
     }
@@ -503,7 +572,8 @@ export default function BranchManager() {
 
   const toggleItemChefRec = async (item: any) => {
     try {
-      await setDoc(doc(db, 'menuItems', item.id), { isChefRecommendation: !item.isChefRecommendation }, { merge: true });
+      await setDoc(doc(db, 'menuItems', item.id), { isChefRecommendation: !item.isChefRecommendation, branchSlug: branchId }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isChefRecommendation: !item.isChefRecommendation } : m));
     } catch (e) {
       handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
     }
@@ -513,7 +583,8 @@ export default function BranchManager() {
     const newDesc = prompt(`Edit description for "${item.name}":`, item.description || "");
     if (newDesc !== null) {
       try {
-        await setDoc(doc(db, 'menuItems', item.id), { description: newDesc.trim() }, { merge: true });
+        await setDoc(doc(db, 'menuItems', item.id), { description: newDesc.trim(), branchSlug: branchId }, { merge: true });
+        setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, description: newDesc.trim() } : m));
       } catch (e) {
         handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
       }
@@ -529,6 +600,7 @@ export default function BranchManager() {
       description: item.description || '',
       isVeg: Boolean(item.isVeg),
       isChefRecommendation: Boolean(item.isChefRecommendation),
+      isAvailable: item.isAvailable !== false,
       imageUrl: item.imageUrl || item.image || ''
     });
   };
@@ -563,6 +635,7 @@ export default function BranchManager() {
         description: editingItem.description.trim(),
         isVeg: Boolean(editingItem.isVeg),
         isChefRecommendation: Boolean(editingItem.isChefRecommendation),
+        isAvailable: editingItem.isAvailable !== false,
         imageUrl: editingItem.imageUrl || null,
         branchSlug: branchId,
         status: 'active',
@@ -577,10 +650,59 @@ export default function BranchManager() {
   };
 
   const handleRemoveMenu = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this menu item?')) return;
+    if (!confirm('Are you sure you want to delete this menu item? It will be removed from the public menu and active management.')) return;
     try {
-      await deleteDoc(doc(db, 'menuItems', id));
+      await setDoc(doc(db, 'menuItems', id), {
+        isDeleted: true,
+        deletedAt: Date.now(),
+        branchSlug: branchId
+      }, { merge: true });
+      const itemToDelete = menuItems.find(m => m.id === id);
       setMenuItems(prev => prev.filter(m => m.id !== id));
+      if (itemToDelete) {
+        setDeletedItems(prev => [{ ...itemToDelete, isDeleted: true, deletedAt: Date.now() }, ...prev.filter(d => d.id !== id)]);
+      }
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, `menuItems/${id}`);
+    }
+  };
+
+  const handleRestoreMenu = async (id: string) => {
+    try {
+      await setDoc(doc(db, 'menuItems', id), {
+        isDeleted: false,
+        isPurged: false,
+        status: 'active',
+        deletedAt: null,
+        branchSlug: branchId,
+        updatedAt: Date.now()
+      }, { merge: true });
+      const itemToRestore = deletedItems.find(d => d.id === id);
+      setDeletedItems(prev => prev.filter(d => d.id !== id));
+      if (itemToRestore) {
+        setMenuItems(prev => [...prev, { ...itemToRestore, isDeleted: false, isPurged: false }]);
+      }
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${id}`);
+    }
+  };
+
+  const handlePermanentDeleteMenu = async (id: string) => {
+    if (!confirm('Permanently purge this item from history? This cannot be undone.')) return;
+    try {
+      const isBaseItem = rawBaseItems.some((i: any) => i.id === id);
+      if (isBaseItem) {
+        await setDoc(doc(db, 'menuItems', id), {
+          id,
+          isDeleted: true,
+          isPurged: true,
+          branchSlug: branchId,
+          deletedAt: Date.now()
+        }, { merge: true });
+      } else {
+        await deleteDoc(doc(db, 'menuItems', id));
+      }
+      setDeletedItems(prev => prev.filter(d => d.id !== id));
     } catch (e) {
       handleFirestoreError(e, OperationType.DELETE, `menuItems/${id}`);
     }
@@ -718,10 +840,20 @@ export default function BranchManager() {
   const handleRemoveCategory = async (id: string) => {
     if (!confirm('Are you sure you want to delete this category? Dishes in this category may be affected.')) return;
     try {
-      await deleteDoc(doc(db, 'categories', id));
+      const isBaseCat = rawBaseCategories.some((c: any) => c.id === id);
+      if (isBaseCat) {
+        await setDoc(doc(db, 'categories', id), {
+          id,
+          isDeleted: true,
+          branchSlug: branchId,
+          deletedAt: Date.now()
+        }, { merge: true });
+      } else {
+        await deleteDoc(doc(db, 'categories', id));
+      }
       setCategories(prev => prev.filter(c => c.id !== id));
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, 'categories');
+      handleFirestoreError(e, OperationType.DELETE, `categories/${id}`);
     }
   };
 
@@ -1174,6 +1306,59 @@ export default function BranchManager() {
                     );
                   })}
                 </div>
+
+                {/* Live Availability Status Filter & Trash Archive */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-amber-200/60">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold uppercase tracking-wider text-neutral-700">Availability:</span>
+                    <button
+                      type="button"
+                      onClick={() => setAvailabilityFilter('all')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        availabilityFilter === 'all'
+                          ? 'bg-neutral-900 text-white shadow-xs'
+                          : 'bg-white text-neutral-700 hover:bg-neutral-100 border border-neutral-300'
+                      }`}
+                    >
+                      All Items ({normalizedMenuItems.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAvailabilityFilter('available')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        availabilityFilter === 'available'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-300'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>In Stock / Available ({availableCount})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAvailabilityFilter('unavailable')}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+                        availabilityFilter === 'unavailable'
+                          ? 'bg-rose-600 text-white shadow-xs'
+                          : 'bg-white text-rose-700 hover:bg-rose-50 border border-rose-300'
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-rose-400" />
+                      <span>Out of Stock / OFF ({unavailableCount})</span>
+                    </button>
+                  </div>
+
+                  {deletedItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowTrashModal(true)}
+                      className="px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 bg-white hover:bg-neutral-100 text-neutral-700 border border-neutral-300 transition-colors shadow-2xs"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-neutral-500" />
+                      <span>Deleted Trash ({deletedItems.length})</span>
+                    </button>
+                  )}
+                </div>
               </div>
               
               <div className="bg-neutral-50 p-5 rounded-xl border border-neutral-200 mb-8 space-y-4">
@@ -1320,14 +1505,16 @@ export default function BranchManager() {
                             <th className="px-4 py-2.5 font-semibold text-neutral-600">Item & Description</th>
                             <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
                             <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
+                            <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-32">Status / Stock</th>
                             <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
                             <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-200">
                           {allFilteredDishes.map((item, itemIdx) => {
+                            const isAvailable = item.isAvailable !== false;
                             return (
-                              <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
+                              <tr key={item.id} className={`hover:bg-neutral-50/50 transition-colors ${!isAvailable ? 'bg-rose-50/20' : ''}`}>
                                 <td className="px-3 py-3 text-center whitespace-nowrap text-xs font-semibold text-neutral-500">
                                   {itemIdx + 1}
                                 </td>
@@ -1352,6 +1539,11 @@ export default function BranchManager() {
                                         {item.isChefRecommendation && (
                                           <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
                                             <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                          </span>
+                                        )}
+                                        {!isAvailable && (
+                                          <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                            Out of Stock
                                           </span>
                                         )}
                                       </div>
@@ -1385,6 +1577,27 @@ export default function BranchManager() {
                                   </button>
                                 </td>
                                 <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
+                                <td className="px-4 py-3 text-center whitespace-nowrap">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleItemAvailability(item)}
+                                    className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                      isAvailable
+                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                                        : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100 shadow-2xs'
+                                    }`}
+                                    title={isAvailable ? "Dish is LIVE. Click to toggle OFF (Out of Stock)" : "Dish is OFF. Click to toggle ON (In Stock)"}
+                                  >
+                                    <span className={`w-7 h-4 flex items-center rounded-full p-0.5 transition-colors ${
+                                      isAvailable ? 'bg-emerald-500' : 'bg-neutral-300'
+                                    }`}>
+                                      <span className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform ${
+                                        isAvailable ? 'translate-x-3' : 'translate-x-0'
+                                      }`} />
+                                    </span>
+                                    <span>{isAvailable ? 'In Stock' : 'Out of Stock'}</span>
+                                  </button>
+                                </td>
                                 <td className="px-4 py-3 text-center">
                                   {item.imageUrl ? (
                                     <div className="flex items-center justify-center gap-2">
@@ -1509,6 +1722,7 @@ export default function BranchManager() {
                                     <th className="px-4 py-2.5 font-semibold text-neutral-600">Item & Description</th>
                                     <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
                                     <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
+                                    <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-32">Status / Stock</th>
                                     <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
                                     <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
                                   </tr>
@@ -1517,9 +1731,10 @@ export default function BranchManager() {
                                   {group.items.map((item, itemIdx) => {
                                     const isFirst = itemIdx === 0;
                                     const isLast = itemIdx === group.items.length - 1;
+                                    const isAvailable = item.isAvailable !== false;
 
                                     return (
-                                      <tr key={item.id} className="hover:bg-neutral-50/50 transition-colors">
+                                      <tr key={item.id} className={`hover:bg-neutral-50/50 transition-colors ${!isAvailable ? 'bg-rose-50/20' : ''}`}>
                                         <td className="px-3 py-3 text-center whitespace-nowrap">
                                           <div className="inline-flex items-center gap-0.5 bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
                                             <button
@@ -1556,6 +1771,11 @@ export default function BranchManager() {
                                                     <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
                                                   </span>
                                                 )}
+                                                {!isAvailable && (
+                                                  <span className="inline-flex items-center gap-1 bg-rose-100 text-rose-800 border border-rose-200 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
+                                                    Out of Stock
+                                                  </span>
+                                                )}
                                               </div>
                                               {item.description ? (
                                                 <p className="text-neutral-500 text-xs mt-0.5 line-clamp-2 leading-relaxed flex items-center gap-1">
@@ -1587,6 +1807,27 @@ export default function BranchManager() {
                                           </button>
                                         </td>
                                         <td className="px-4 py-3 font-semibold text-neutral-900">₹{item.price}</td>
+                                        <td className="px-4 py-3 text-center whitespace-nowrap">
+                                          <button
+                                            type="button"
+                                            onClick={() => toggleItemAvailability(item)}
+                                            className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                              isAvailable
+                                                ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                                                : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100 shadow-2xs'
+                                            }`}
+                                            title={isAvailable ? "Dish is LIVE. Click to toggle OFF (Out of Stock)" : "Dish is OFF. Click to toggle ON (In Stock)"}
+                                          >
+                                            <span className={`w-7 h-4 flex items-center rounded-full p-0.5 transition-colors ${
+                                              isAvailable ? 'bg-emerald-500' : 'bg-neutral-300'
+                                            }`}>
+                                              <span className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform ${
+                                                isAvailable ? 'translate-x-3' : 'translate-x-0'
+                                              }`} />
+                                            </span>
+                                            <span>{isAvailable ? 'In Stock' : 'Out of Stock'}</span>
+                                          </button>
+                                        </td>
                                         <td className="px-4 py-3 text-center">
                                           {item.imageUrl ? (
                                             <div className="flex items-center justify-center gap-2">
@@ -2043,13 +2284,13 @@ export default function BranchManager() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                   <div>
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Dietary Type</label>
                     <button
                       type="button"
                       onClick={() => setEditingItem({ ...editingItem, isVeg: !editingItem.isVeg })}
-                      className={`w-full py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+                      className={`w-full py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
                         editingItem.isVeg ? 'bg-green-50 border-green-300 text-green-700 shadow-sm' : 'bg-red-50 border-red-200 text-red-700 shadow-sm'
                       }`}
                     >
@@ -2063,12 +2304,28 @@ export default function BranchManager() {
                     <button
                       type="button"
                       onClick={() => setEditingItem({ ...editingItem, isChefRecommendation: !editingItem.isChefRecommendation })}
-                      className={`w-full py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      className={`w-full py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                         editingItem.isChefRecommendation ? 'bg-amber-100 border-amber-300 text-amber-900 shadow-sm' : 'bg-neutral-50 border-neutral-300 text-neutral-600 hover:bg-neutral-100'
                       }`}
                     >
                       <Flame className={`w-3.5 h-3.5 ${editingItem.isChefRecommendation ? 'text-amber-600 fill-amber-500' : 'text-neutral-400'}`} />
                       <span>{editingItem.isChefRecommendation ? "Chef's Special" : 'Standard'}</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Availability (Live)</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditingItem({ ...editingItem, isAvailable: editingItem.isAvailable === false ? true : false })}
+                      className={`w-full py-2.5 px-3 rounded-lg border text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                        editingItem.isAvailable !== false
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm'
+                          : 'bg-rose-50 border-rose-300 text-rose-800 shadow-sm'
+                      }`}
+                    >
+                      <span className={`w-2.5 h-2.5 rounded-full ${editingItem.isAvailable !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                      <span>{editingItem.isAvailable !== false ? 'In Stock (ON)' : 'Out of Stock (OFF)'}</span>
                     </button>
                   </div>
                 </div>
@@ -2269,6 +2526,122 @@ export default function BranchManager() {
                   className="px-5 py-2 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors shadow-sm"
                 >
                   Save Changes
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Trash / Deleted Items Management Modal */}
+      <AnimatePresence>
+        {showTrashModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowTrashModal(false)}
+            />
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-neutral-200 overflow-hidden z-10 flex flex-col max-h-[85vh]"
+            >
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center text-rose-700">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-neutral-900">Deleted Items ({deletedItems.length})</h3>
+                    <p className="text-xs text-neutral-500">Deleted items are hidden from public menus. You can restore or permanently delete them.</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTrashModal(false)}
+                  className="p-1.5 text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200/60 rounded-full transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 overflow-y-auto space-y-3 flex-1">
+                {deletedItems.length === 0 ? (
+                  <div className="py-12 text-center text-neutral-400">
+                    <Trash2 className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                    <p className="text-sm font-medium">Trash is empty</p>
+                    <p className="text-xs text-neutral-400 mt-0.5">No deleted menu items for this branch.</p>
+                  </div>
+                ) : (
+                  deletedItems.map(item => (
+                    <div
+                      key={item.id}
+                      className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200 flex items-center justify-between gap-3"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.name}
+                            className="w-12 h-12 object-cover rounded-lg border border-neutral-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-neutral-200 flex items-center justify-center text-neutral-400 shrink-0 text-xs">
+                            No Photo
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <DietarySymbol isVeg={item.isVeg} size="sm" />
+                            <h4 className="font-semibold text-sm text-neutral-900 truncate">{item.name}</h4>
+                            <span className="text-xs font-semibold text-neutral-600 bg-neutral-200/70 px-2 py-0.5 rounded">
+                              ₹{item.price}
+                            </span>
+                          </div>
+                          <p className="text-xs text-neutral-500 mt-0.5">
+                            Category: <span className="font-medium text-neutral-700">{item.category || 'General'}</span>
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreMenu(item.id)}
+                          className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-2xs"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Restore to Menu</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePermanentDeleteMenu(item.id)}
+                          className="px-2.5 py-1.5 bg-white hover:bg-rose-50 text-rose-600 border border-neutral-200 hover:border-rose-300 rounded-lg text-xs font-medium transition-colors"
+                          title="Permanently remove"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-3.5 bg-neutral-50 border-t border-neutral-200 flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowTrashModal(false)}
+                  className="px-4 py-2 bg-neutral-900 hover:bg-black text-white text-xs font-semibold rounded-lg transition-colors"
+                >
+                  Done
                 </button>
               </div>
             </motion.div>

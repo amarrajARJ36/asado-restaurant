@@ -13,6 +13,7 @@ export interface DishItem {
   isVeg?: boolean;
   isChefRecommendation?: boolean;
   category?: string;
+  isAvailable?: boolean;
 }
 
 interface DishDetailModalProps {
@@ -144,6 +145,17 @@ export default function DishDetailModal({
                 <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${chefBadgeBg}`}>
                   <Flame className="w-3.5 h-3.5" /> Chef's Recommendation
                 </span>
+              </div>
+            )}
+
+            {/* Unavailability Banner */}
+            {dish.isAvailable === false && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl p-3.5 flex items-center justify-between gap-3 text-xs font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                  Currently Out of Stock / Sold Out Today
+                </span>
+                <span className="text-[11px] font-normal text-rose-600">Check with staff</span>
               </div>
             )}
 
