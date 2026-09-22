@@ -16,7 +16,10 @@ export default function AlappuzhaMenu() {
   const [selectedDish, setSelectedDish] = useState<any | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
-  const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>(() => normalizeMenuItems(staticAlappuzhaMenu, staticAlappuzhaCategories));
+  const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>(() => {
+    const all = normalizeMenuItems(staticAlappuzhaMenu, staticAlappuzhaCategories);
+    return all.filter((item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
+  });
   const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>(staticAlappuzhaCategories);
   const { banners } = useBanners('alappuzha');
   const [currentBanner, setCurrentBanner] = useState(0);
@@ -89,8 +92,8 @@ export default function AlappuzhaMenu() {
           }
         });
 
-        // Filter out soft-deleted and permanently purged items
-        const activeItems = merged.filter((item: any) => item.isDeleted !== true && item.isPurged !== true);
+        // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
+        const activeItems = merged.filter((item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
         latestRawItems = activeItems;
         setAlappuzhaMenu(normalizeMenuItems(activeItems, latestCategories));
       },
@@ -110,9 +113,9 @@ export default function AlappuzhaMenu() {
     return alappuzhaMenu.filter(item => {
       const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             item.description.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesSearch;
+      return matchesSearch && item.isAvailable !== false;
     });
-  }, [searchQuery, isSearchActive]);
+  }, [searchQuery, isSearchActive, alappuzhaMenu]);
 
   const categoryItems = useMemo(() => {
     if (!activeCategoryName) return [];
@@ -195,8 +198,32 @@ export default function AlappuzhaMenu() {
       <div className="bg-white border-b border-neutral-200 py-12 px-4">
         <div className="max-w-5xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold uppercase tracking-tight text-neutral-900 mb-4">Digital Menu</h1>
-          <p className="text-neutral-500 mb-8 max-w-xl mx-auto">Savor authentic backwater cuisine and premium family dining.</p>
+          <p className="text-neutral-500 mb-6 max-w-xl mx-auto">Savor authentic backwater cuisine and premium family dining.</p>
           
+          {/* Promotional Banner (Only visible when active) */}
+          {banners.length > 0 && (
+            <div className="mb-8 max-w-xl mx-auto">
+              <div className={`p-4 sm:p-5 rounded-2xl border text-center shadow-xs transition-all ${
+                banners[0]?.bgColor || 'bg-amber-50'
+              } ${
+                banners[0]?.bgColor === 'bg-amber-50' ? 'border-amber-200 text-amber-950' : 
+                banners[0]?.bgColor?.includes('blue') ? 'border-blue-200 text-blue-950' :
+                banners[0]?.bgColor?.includes('emerald') ? 'border-emerald-200 text-emerald-950' :
+                banners[0]?.bgColor?.includes('neutral') ? 'border-neutral-800 text-white' : 'border-amber-200 text-amber-950'
+              }`}>
+                <span className={`inline-block px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider mb-2 ${banners[0]?.tagBg || 'bg-amber-200'} ${banners[0]?.tagColor || 'text-amber-900'}`}>
+                  {banners[0]?.tagText || "Today's Special"}
+                </span>
+                <h3 className="text-lg sm:text-xl font-bold mb-1">
+                  {banners[0]?.title}
+                </h3>
+                <p className="text-xs sm:text-sm opacity-90">
+                  {banners[0]?.subtitle}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="relative max-w-md mx-auto">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
             <input 

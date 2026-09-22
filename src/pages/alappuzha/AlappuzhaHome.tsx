@@ -7,6 +7,7 @@ import {
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { useBanners } from '../../hooks/useBanners';
 
 const TRAVEL_GROUPS = [
   { id: 'couple', label: 'Couple', icon: Heart },
@@ -77,6 +78,7 @@ export default function AlappuzhaHome() {
   const [activeGroup, setActiveGroup] = useState<string>('couple');
   const [activeGallery, setActiveGallery] = useState('All');
   const [galleryImages, setGalleryImages] = useState<any[]>([]);
+  const { banners } = useBanners('alappuzha');
 
   useEffect(() => {
     const q = query(collection(db, 'galleryImages'), where('branchSlug', '==', 'alappuzha'));
@@ -175,6 +177,23 @@ export default function AlappuzhaHome() {
           </motion.div>
         </div>
       </section>
+
+      {/* Offers & Announcement Banner (Only visible when active) */}
+      {banners.length > 0 && (
+        <section className={`py-8 border-b relative overflow-hidden transition-colors duration-500 ${banners[0]?.bgColor || 'bg-amber-50'} ${banners[0]?.bgColor === 'bg-amber-50' ? 'border-amber-100' : 'border-teal-100'}`}>
+          <div className="max-w-4xl mx-auto px-4 text-center relative z-10">
+            <span className={`inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2 ${banners[0]?.tagBg || 'bg-amber-200'} ${banners[0]?.tagColor || 'text-amber-900'}`}>
+              {banners[0]?.tagText || "Special Announcement"}
+            </span>
+            <h2 className={`text-2xl md:text-3xl font-bold mb-2 ${banners[0]?.textColor || 'text-slate-900'}`}>
+              {banners[0]?.title}
+            </h2>
+            <p className={`opacity-80 max-w-xl mx-auto ${banners[0]?.textColor || 'text-slate-700'}`}>
+              {banners[0]?.subtitle}
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* 2. Discover the Backwaters */}
       <section className="py-24 px-4 relative">

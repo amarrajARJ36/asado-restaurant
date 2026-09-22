@@ -13,7 +13,10 @@
         "tagBg": { "type": "string", "maxLength": 50 },
         "tagColor": { "type": "string", "maxLength": 50 },
         "isActive": { "type": "boolean" },
-        "branchSlug": { "type": "string", "maxLength": 50 }
+        "branchSlug": { "type": "string", "maxLength": 50 },
+        "id": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
       },
       "required": ["title", "subtitle"]
     },

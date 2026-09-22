@@ -18,9 +18,8 @@ export default function BranchManager() {
   const [activeTab, setActiveTab] = useState('menu');
   
   // Offers Banner Hook & State
-  const { allBanners, addBanner, updateBanner, toggleBanner, removeBanner } = useBanners(undefined, { includeInactive: true });
-  const branchBanners = allBanners.filter(b => b.branchSlug === branchId || b.branchSlug === 'all');
-  const targetBanner = branchBanners.find(b => b.branchSlug === branchId) || branchBanners[0];
+  const { allBanners, loading: bannersLoading, addBanner, updateBanner, toggleBanner } = useBanners(undefined, { includeInactive: true });
+  const targetBanner = allBanners.find(b => b.branchSlug === branchId || b.id === `banner-${branchId}`);
 
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerSubtitle, setBannerSubtitle] = useState('');
@@ -194,7 +193,9 @@ export default function BranchManager() {
 
   // Sync banner state for this branch
   useEffect(() => {
-    if (targetBanner && !bannerInitDone) {
+    if (bannersLoading) return; // Wait until Firestore snapshot finishes loading
+
+    if (targetBanner) {
       setBannerTitle(targetBanner.title || '');
       setBannerSubtitle(targetBanner.subtitle || '');
       setBannerTagText(targetBanner.tagText || "Today's Special");
@@ -210,7 +211,7 @@ export default function BranchManager() {
       setBannerTheme('amber');
       setBannerInitDone(true);
     }
-  }, [targetBanner, branch, bannerInitDone]);
+  }, [targetBanner, branch, bannersLoading, bannerInitDone]);
 
   const handleSaveBanner = async () => {
     if (!bannerTitle.trim()) {
@@ -226,46 +227,62 @@ export default function BranchManager() {
       ? { bgColor: 'bg-neutral-900', textColor: 'text-white', tagBg: 'bg-amber-500', tagColor: 'text-neutral-950' }
       : { bgColor: 'bg-amber-50', textColor: 'text-amber-950', tagBg: 'bg-amber-200', tagColor: 'text-amber-900' };
 
+    const id = targetBanner?.id || `banner-${branchId}`;
+
     try {
-      if (targetBanner && (targetBanner.branchSlug === branchId || targetBanner.id.startsWith('starter-'))) {
-        await updateBanner(targetBanner.id, {
-          title: bannerTitle.trim(),
-          subtitle: bannerSubtitle.trim(),
-          tagText: bannerTagText.trim(),
-          branchSlug: branchId,
-          isActive: bannerIsActive,
-          ...themeConfig
-        });
-      } else {
-        await addBanner({
-          title: bannerTitle.trim(),
-          subtitle: bannerSubtitle.trim(),
-          tagText: bannerTagText.trim(),
-          branchSlug: branchId,
-          isActive: bannerIsActive,
-          ...themeConfig
-        });
-      }
+      await setDoc(doc(db, 'banners', id), {
+        id,
+        title: bannerTitle.trim(),
+        subtitle: bannerSubtitle.trim(),
+        tagText: bannerTagText.trim(),
+        branchSlug: branchId,
+        isActive: bannerIsActive,
+        updatedAt: Date.now(),
+        ...themeConfig
+      }, { merge: true });
+
       setBannerSavedNotice(true);
       setTimeout(() => setBannerSavedNotice(false), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save banner:", err);
-      alert("Error saving banner: " + (err as Error).message);
+      handleFirestoreError(err, OperationType.UPDATE, `banners/${id}`);
+      alert("Error saving banner: " + (err?.message || "Unknown error"));
     } finally {
       setIsSavingBanner(false);
     }
   };
 
   const handleToggleBannerActive = async (bannerIdToToggle?: string, currentState?: boolean) => {
-    const id = bannerIdToToggle || targetBanner?.id;
+    const id = bannerIdToToggle || targetBanner?.id || `banner-${branchId}`;
     const nextState = currentState !== undefined ? !currentState : !bannerIsActive;
     setBannerIsActive(nextState);
-    if (id) {
-      try {
-        await toggleBanner(id, nextState);
-      } catch (err) {
-        console.error("Error toggling banner", err);
-      }
+
+    const themeConfig = bannerTheme === 'blue'
+      ? { bgColor: 'bg-blue-50', textColor: 'text-blue-950', tagBg: 'bg-blue-200', tagColor: 'text-blue-900' }
+      : bannerTheme === 'green'
+      ? { bgColor: 'bg-emerald-50', textColor: 'text-emerald-950', tagBg: 'bg-emerald-200', tagColor: 'text-emerald-900' }
+      : bannerTheme === 'dark'
+      ? { bgColor: 'bg-neutral-900', textColor: 'text-white', tagBg: 'bg-amber-500', tagColor: 'text-neutral-950' }
+      : { bgColor: 'bg-amber-50', textColor: 'text-amber-950', tagBg: 'bg-amber-200', tagColor: 'text-amber-900' };
+
+    try {
+      await setDoc(doc(db, 'banners', id), {
+        id,
+        title: bannerTitle.trim() || (branch?.slug === 'kollam' ? "See Live FIFA 2026 Matches (Everyday)" : "Live Music Every Saturday"),
+        subtitle: bannerSubtitle.trim() || "Promotional specials and lakeside dining.",
+        tagText: bannerTagText.trim() || "Special Event",
+        branchSlug: branchId,
+        isActive: nextState,
+        updatedAt: Date.now(),
+        ...themeConfig
+      }, { merge: true });
+
+      setBannerSavedNotice(true);
+      setTimeout(() => setBannerSavedNotice(false), 4000);
+    } catch (err: any) {
+      console.error("Error toggling banner", err);
+      handleFirestoreError(err, OperationType.UPDATE, `banners/${id}`);
+      alert("Error updating banner: " + (err?.message || "Unknown error"));
     }
   };
 

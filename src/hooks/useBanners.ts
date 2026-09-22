@@ -59,7 +59,6 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
       try {
         const snap = await getDocs(collection(db, 'banners'));
         if (snap.empty) {
-          // Check if user has explicitly seeded or deleted
           const seededMarker = localStorage.getItem('asado_banners_seeded_v1');
           if (!seededMarker) {
             localStorage.setItem('asado_banners_seeded_v1', 'true');
@@ -89,20 +88,34 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
   }, []);
 
   // Filter for display
-  let filtered = allBanners;
+  let filtered: Banner[] = [];
 
-  // Unless explicitly requested, consumer views only see active banners
-  if (!options?.includeInactive) {
-    filtered = filtered.filter(b => b.isActive !== false);
-  }
-
-  // Filter by branch
   if (branchSlug) {
-    filtered = filtered.filter(b => !b.branchSlug || b.branchSlug === 'all' || b.branchSlug === branchSlug);
+    // Look for banners specifically configured for this branch
+    const branchSpecific = allBanners.filter(b => b.branchSlug === branchSlug || b.id === `banner-${branchSlug}`);
+    if (branchSpecific.length > 0) {
+      // If branch has its own banner configured, that is authoritative for this branch!
+      filtered = options?.includeInactive 
+        ? branchSpecific 
+        : branchSpecific.filter(b => b.isActive !== false);
+    } else {
+      // Fallback to global banners only if no branch-specific banner exists
+      const globalBanners = allBanners.filter(b => !b.branchSlug || b.branchSlug === 'all');
+      filtered = options?.includeInactive 
+        ? globalBanners 
+        : globalBanners.filter(b => b.isActive !== false);
+    }
+  } else {
+    // No branchSlug specified (admin dashboard overview)
+    if (!options?.includeInactive) {
+      filtered = allBanners.filter(b => b.isActive !== false);
+    } else {
+      filtered = allBanners;
+    }
   }
 
   const addBanner = async (banner: Partial<Banner>) => {
-    const id = banner.id || 'banner-' + Date.now().toString();
+    const id = banner.id || (banner.branchSlug && banner.branchSlug !== 'all' ? `banner-${banner.branchSlug}` : 'banner-' + Date.now().toString());
     const newBanner: Banner = {
       id,
       title: banner.title || '',
@@ -117,7 +130,7 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
       createdAt: banner.createdAt || Date.now(),
     };
     try {
-      await setDoc(doc(db, 'banners', id), newBanner);
+      await setDoc(doc(db, 'banners', id), newBanner, { merge: true });
       return id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `banners/${id}`);
@@ -127,7 +140,7 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
 
   const updateBanner = async (id: string, updates: Partial<Banner>) => {
     try {
-      await updateDoc(doc(db, 'banners', id), updates);
+      await setDoc(doc(db, 'banners', id), updates, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `banners/${id}`);
       throw error;
@@ -136,7 +149,7 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
 
   const toggleBanner = async (id: string, newActiveState: boolean) => {
     try {
-      await updateDoc(doc(db, 'banners', id), { isActive: newActiveState });
+      await setDoc(doc(db, 'banners', id), { isActive: newActiveState }, { merge: true });
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `banners/${id}`);
       throw error;
