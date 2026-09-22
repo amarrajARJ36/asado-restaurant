@@ -85,7 +85,7 @@ export default function MainHome() {
                 key={branch.id}
                 className="relative group rounded-3xl overflow-hidden bg-neutral-900 border border-neutral-800"
               >
-                <div className="aspect-[16/9] md:aspect-[21/9] relative w-full overflow-hidden bg-neutral-800">
+                <div className="relative w-full min-h-[280px] sm:min-h-[320px] md:min-h-0 md:aspect-[21/9] overflow-hidden bg-neutral-800">
                   {/* Conditional Background Image */}
                   <img 
                     src={
@@ -100,25 +100,24 @@ export default function MainHome() {
                   />
                   
                   {/* Gradients for text legibility */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent md:hidden" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent md:hidden" />
                   
                   {/* Content Overlay */}
-                  <div className="absolute inset-0 p-6 md:p-16 flex flex-col justify-end md:justify-center">
+                  <div className="absolute inset-0 p-6 sm:p-8 md:p-16 flex flex-col justify-center">
                     <div className="max-w-xl">
-                      <div className="flex items-center gap-3 mb-4">
-
-                        <h3 className="text-3xl md:text-5xl font-bold uppercase tracking-tight text-white">{branch.name}</h3>
+                      <div className="flex items-center gap-3 mb-2 sm:mb-3">
+                        <h3 className="text-2xl sm:text-3xl md:text-5xl font-bold uppercase tracking-tight text-white">{branch.name}</h3>
                       </div>
                       
-                      <p className="text-neutral-300 text-lg md:text-xl font-light mb-8 max-w-md leading-relaxed">
+                      <p className="text-neutral-300 text-sm sm:text-base md:text-xl font-light mb-5 sm:mb-6 md:mb-8 max-w-md leading-relaxed">
                         {branch.description}
                       </p>
 
                       {branch.status === 'active' ? (
                         <Link 
                           to={`/${branch.slug}`}
-                          className="inline-flex items-center gap-2 bg-white text-black px-6 py-3 rounded-full font-medium transition-colors hover:bg-neutral-200"
+                          className="inline-flex items-center gap-2 bg-white text-black px-5 py-2.5 sm:px-6 sm:py-3 rounded-full text-sm sm:text-base font-medium transition-colors hover:bg-neutral-200"
                         >
                           Visit {branch.name}
                           <ArrowRight className="w-4 h-4" />
