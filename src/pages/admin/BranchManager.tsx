@@ -110,9 +110,22 @@ export default function BranchManager() {
   const [compressingEditCatImage, setCompressingEditCatImage] = useState(false);
   const editCatFileInputRef = useRef<HTMLInputElement>(null);
 
-  const [newImageCategory, setNewImageCategory] = useState('Food');
+  const galleryCategories = useMemo(() => {
+    if (branchId === 'alappuzha') {
+      return ['Ambience', 'Houseboats', 'Celebration'];
+    }
+    return ['Ambience', 'Lake View', 'Boating', 'Decoration'];
+  }, [branchId]);
 
-  const galleryCategories = ['Food', 'Ambience', 'Lake View', 'Boating', 'Events', 'Decorations'];
+  const [newImageCategory, setNewImageCategory] = useState(() => 
+    branchId === 'alappuzha' ? 'Ambience' : 'Ambience'
+  );
+
+  useEffect(() => {
+    if (galleryCategories.length > 0) {
+      setNewImageCategory(galleryCategories[0]);
+    }
+  }, [branchId, galleryCategories]);
 
   useEffect(() => {
     if (!branchId) return;

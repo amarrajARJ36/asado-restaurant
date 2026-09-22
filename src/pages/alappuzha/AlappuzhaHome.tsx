@@ -50,7 +50,7 @@ const HOUSEBOAT_RECOMMENDATIONS = {
   }
 };
 
-const GALLERY_CATEGORIES = ['All', 'Restaurant', 'Houseboats', 'Celebrations', 'Food', 'Backwaters', 'Sunsets'];
+const GALLERY_CATEGORIES = ['All', 'Ambience', 'Houseboats', 'Celebration'];
 const GALLERY_IMAGES: Array<{src: string, category: string}> = []; 
 
 const scrollFadeUp = {
@@ -106,7 +106,15 @@ export default function AlappuzhaHome() {
 
   const filteredGallery = activeGallery === 'All' 
     ? galleryImages 
-    : galleryImages.filter(img => img.category === activeGallery);
+    : galleryImages.filter(img => {
+        if (activeGallery === 'Celebration') {
+          return img.category === 'Celebration' || img.category === 'Celebrations';
+        }
+        if (activeGallery === 'Ambience') {
+          return img.category === 'Ambience' || img.category === 'Restaurant';
+        }
+        return img.category === activeGallery;
+      });
 
   return (
     <div className="bg-slate-50 min-h-screen text-slate-900 font-sans selection:bg-teal-700/30 selection:text-teal-900 overflow-x-hidden">

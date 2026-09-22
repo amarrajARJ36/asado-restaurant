@@ -22,17 +22,20 @@ export default function KollamGallery() {
 
   const filters = [
     { id: 'all', name: 'All Photos' },
-    { id: 'Food', name: 'Food' },
     { id: 'Ambience', name: 'Ambience' },
     { id: 'Lake View', name: 'Lake View' },
     { id: 'Boating', name: 'Boating' },
-    { id: 'Events', name: 'Events' },
-    { id: 'Decorations', name: 'Decorations' },
+    { id: 'Decoration', name: 'Decoration' },
   ];
 
   const filteredGallery = activeFilter === 'all' 
     ? kollamGallery 
-    : kollamGallery.filter(img => img.category === activeFilter);
+    : kollamGallery.filter(img => {
+        if (activeFilter === 'Decoration') {
+          return img.category === 'Decoration' || img.category === 'Decorations';
+        }
+        return img.category === activeFilter;
+      });
 
   return (
     <div className="min-h-screen bg-white pt-12 pb-24">

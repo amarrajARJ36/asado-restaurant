@@ -115,18 +115,6 @@ export default function MainHome() {
                         {branch.description}
                       </p>
 
-                      {/* Dynamic Banner Message based on Branch */}
-                      {branch.slug === 'kollam' && (
-                        <div className="inline-block bg-amber-500/20 border border-amber-500/30 text-amber-300 px-4 py-2 rounded-lg text-sm font-medium mb-8">
-                          See Live Fifa 2026 Matches (Everyday)
-                        </div>
-                      )}
-                       {branch.slug === 'alappuzha' && (
-                        <div className="inline-block bg-blue-500/20 border border-blue-500/30 text-blue-300 px-4 py-2 rounded-lg text-sm font-medium mb-8">
-                          Live Music Every Saturday
-                        </div>
-                      )}
-
                       {branch.status === 'active' ? (
                         <Link 
                           to={`/${branch.slug}`}
