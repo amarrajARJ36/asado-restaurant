@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { branches } from '../../data';
+import AdminPinLock from '../../components/AdminPinLock';
 import { 
   LayoutDashboard, 
   Store, 
@@ -18,6 +19,12 @@ import { cn } from '../../lib/utils';
 export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return (
+      localStorage.getItem('asado_admin_auth') === 'true' ||
+      sessionStorage.getItem('asado_admin_auth') === 'true'
+    );
+  });
   const [branchesOpen, setBranchesOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const branchesDropdownRef = useRef<HTMLDivElement>(null);
@@ -45,9 +52,16 @@ export default function AdminLayout() {
 
   const handleLogout = () => {
     if (confirm("Are you sure you want to log out of the admin panel?")) {
-      navigate('/');
+      localStorage.removeItem('asado_admin_auth');
+      sessionStorage.removeItem('asado_admin_auth');
+      setIsAuthenticated(false);
+      navigate('/admin');
     }
   };
+
+  if (!isAuthenticated) {
+    return <AdminPinLock onUnlock={() => setIsAuthenticated(true)} />;
+  }
 
   return (
     <div className="min-h-screen bg-neutral-100 text-neutral-900 flex flex-col w-full overflow-x-hidden">
