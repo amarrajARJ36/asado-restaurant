@@ -35,115 +35,115 @@ export const kollamCategories: Category[] = [
     "id": "c11",
     "branch_id": "b1",
     "name": "Fried Rice",
-    "image": "https://images.unsplash.com/photo-1603133872878-684f208fb84b?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1603133872878-684f208fb84b?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c12",
     "branch_id": "b1",
     "name": "Noodles",
-    "image": "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c13",
     "branch_id": "b1",
     "name": "Gravy Items",
-    "image": "https://images.unsplash.com/photo-1631452180519-c014fe946bc0?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1631452180519-c014fe946bc0?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c14",
     "branch_id": "b1",
     "name": "Soup",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c15",
     "branch_id": "b1",
     "name": "Special Items",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c16",
     "branch_id": "b1",
     "name": "Burgers",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c17",
     "branch_id": "b1",
     "name": "Veg Burgers & Wraps",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c18",
     "branch_id": "b1",
     "name": "Starters",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c19",
     "branch_id": "b1",
     "name": "Asado Desserts & Specials",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c110",
     "branch_id": "b1",
     "name": "Soft Drinks",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c111",
     "branch_id": "b1",
     "name": "Mocktails",
-    "image": "https://images.unsplash.com/photo-1551538827-9c037cb4f32a?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1551538827-9c037cb4f32a?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c112",
     "branch_id": "b1",
     "name": "Shakes",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c113",
     "branch_id": "b1",
     "name": "Fresh Juice",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c114",
     "branch_id": "b1",
     "name": "Barbeque",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c115",
     "branch_id": "b1",
     "name": "Breads",
-    "image": "https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c116",
     "branch_id": "b1",
     "name": "Asado Special Platters",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c117",
     "branch_id": "b1",
     "name": "Sundae",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c118",
     "branch_id": "b1",
     "name": "Pizza",
-    "image": "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1513104890138-7c749659a591?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c119",
     "branch_id": "b1",
     "name": "Pasta",
-    "image": "https://images.unsplash.com/photo-1621996311227-2e4d9653ae85?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1621996311227-2e4d9653ae85?q=80&w=600&q=75&auto=format&fit=crop"
   }
 ];
 
@@ -1675,25 +1675,25 @@ export const alappuzhaCategories: Category[] = [
     "id": "c5",
     "branch_id": "b2",
     "name": "Backwater Specials",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c6",
     "branch_id": "b2",
     "name": "Family Combos",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c7",
     "branch_id": "b2",
     "name": "Appetizers",
-    "image": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?q=80&w=600&q=75&auto=format&fit=crop"
   },
   {
     "id": "c8",
     "branch_id": "b2",
     "name": "Beverages",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=2000&auto=format&fit=crop"
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop"
   }
 ];
 
@@ -1705,7 +1705,7 @@ export const alappuzhaMenu: FoodItem[] = [
     "name": "Karimeen Pollichathu",
     "price": 750,
     "description": "Pearl spot fish marinated in rich Kerala spices and baked in banana leaf.",
-    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=3144&auto=format&fit=crop",
+    "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop",
     "isVeg": false,
     "isChefRecommendation": true
   },
@@ -1716,7 +1716,7 @@ export const alappuzhaMenu: FoodItem[] = [
     "name": "Kuttanadan Duck Roast",
     "price": 680,
     "description": "Traditional slow-roasted duck with aromatic spices.",
-    "image": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?q=80&w=3144&auto=format&fit=crop",
+    "image": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?q=80&w=600&q=75&auto=format&fit=crop",
     "isVeg": false,
     "isChefRecommendation": true
   },
@@ -1727,7 +1727,7 @@ export const alappuzhaMenu: FoodItem[] = [
     "name": "Tapioca Cutlet",
     "price": 280,
     "description": "Crispy cutlets made with seasoned tapioca.",
-    "image": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?q=80&w=3144&auto=format&fit=crop",
+    "image": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?q=80&w=600&q=75&auto=format&fit=crop",
     "isVeg": true,
     "isChefRecommendation": false
   },
@@ -1738,7 +1738,7 @@ export const alappuzhaMenu: FoodItem[] = [
     "name": "Coconut Paradise",
     "price": 220,
     "description": "Tender coconut water blended with mint and honey.",
-    "image": "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?q=80&w=3144&auto=format&fit=crop",
+    "image": "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?q=80&w=600&q=75&auto=format&fit=crop",
     "isVeg": true,
     "isChefRecommendation": false
   }

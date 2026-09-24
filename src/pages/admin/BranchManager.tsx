@@ -92,7 +92,7 @@ export default function BranchManager() {
   } | null>(null);
   const [compressingEditImage, setCompressingEditImage] = useState(false);
 
-  const DEFAULT_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1200&auto=format&fit=crop";
+  const DEFAULT_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryImage, setNewCategoryImage] = useState('');

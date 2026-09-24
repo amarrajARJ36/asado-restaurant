@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { branches } from '../data';
 import { motion } from 'motion/react';
 import { ChevronRight, ArrowRight, Star } from 'lucide-react';
+import FooterCopyright from '../components/FooterCopyright';
 
 export default function MainHome() {
   const scrollToBranches = () => {
@@ -263,7 +264,7 @@ export default function MainHome() {
 
       {/* Footer (Brand level) */}
       <footer className="border-t border-neutral-900 py-12 text-center text-neutral-500">
-        <p className="uppercase tracking-widest text-sm">&copy; {new Date().getFullYear()} Asado Café. All rights reserved.</p>
+        <FooterCopyright className="text-neutral-500 text-sm" />
       </footer>
     </div>
   );

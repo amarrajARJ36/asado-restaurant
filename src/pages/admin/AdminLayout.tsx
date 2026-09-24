@@ -15,6 +15,7 @@ import {
   UtensilsCrossed
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import FooterCopyright from '../../components/FooterCopyright';
 
 export default function AdminLayout() {
   const location = useLocation();
@@ -315,6 +316,16 @@ export default function AdminLayout() {
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 min-w-0">
         <Outlet />
       </main>
+
+      {/* Admin Footer */}
+      <footer className="w-full bg-white border-t border-neutral-200 py-6 text-center mt-auto">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <FooterCopyright 
+            className="text-neutral-500 text-xs sm:text-sm" 
+            linkClassName="text-amber-600 hover:text-amber-700 font-semibold hover:underline transition-colors" 
+          />
+        </div>
+      </footer>
       
     </div>
   );

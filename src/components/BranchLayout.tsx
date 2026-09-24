@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { MapPin, ChevronDown, Menu as MenuIcon, X } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import FooterCopyright from './FooterCopyright';
 
 interface BranchLayoutProps {
   branchSlug: string;
@@ -249,6 +250,11 @@ export default function BranchLayout({ branchSlug }: BranchLayoutProps) {
               </a>
             </div>
           </div>
+        </div>
+
+        {/* Bottom Copyright */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 pt-8 border-t border-neutral-800 text-center">
+          <FooterCopyright className="text-neutral-500 text-sm" />
         </div>
       </footer>
     </div>

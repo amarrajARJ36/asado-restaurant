@@ -8,8 +8,10 @@ import { alappuzhaMenu as staticAlappuzhaMenu, alappuzhaCategories as staticAlap
 import { normalizeMenuItems } from '../../lib/categoryUtils';
 import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
+import CategoryTile from '../../components/CategoryTile';
+import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
 
-const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=80&w=1200&auto=format&fit=crop";
+const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
 export default function AlappuzhaMenu() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -30,6 +32,9 @@ export default function AlappuzhaMenu() {
   const prevBanner = () => setCurrentBanner((prev) => (prev - 1 + banners.length) % banners.length);
 
   useEffect(() => {
+    // Immediately preload initial static category images into browser cache
+    preloadCategoryImages(staticAlappuzhaCategories);
+
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
     checkIsDesktop();
     window.addEventListener('resize', checkIsDesktop);
@@ -56,6 +61,7 @@ export default function AlappuzhaMenu() {
         const activeCats = merged.filter((cat: any) => cat.isDeleted !== true);
         latestCategories = activeCats;
         setAlappuzhaCategories(activeCats);
+        preloadCategoryImages(activeCats);
         // Re-normalize current dishes with latest categories
         setAlappuzhaMenu(normalizeMenuItems(latestRawItems, activeCats));
       },
@@ -493,45 +499,15 @@ export default function AlappuzhaMenu() {
                 {alappuzhaCategories.map((category, index) => {
                   const itemCount = alappuzhaMenu.filter(m => m.category === category.name).length;
                   return (
-                    <motion.button
+                    <CategoryTile
                       key={category.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.05 }}
+                      category={category}
+                      itemCount={itemCount}
+                      index={index}
                       onClick={() => setActiveCategoryName(category.name)}
-                      className="bg-neutral-950 rounded-2xl shadow-md border border-neutral-800/80 hover:border-teal-400 p-5 flex flex-col justify-end text-left transition-all duration-300 group aspect-[4/3] sm:aspect-square relative overflow-hidden hover:shadow-xl hover:scale-[1.02]"
-                    >
-                      {/* Category culinary background image */}
-                      <div className="absolute inset-0 z-0">
-                        <img 
-                          src={category.imageUrl || category.image || COMMON_CATEGORY_BG} 
-                          alt={category.name} 
-                          loading="lazy"
-                          decoding="async"
-                          className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60 group-hover:opacity-75" 
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30 group-hover:from-black/90 group-hover:via-black/50 transition-colors" />
-                      </div>
-
-                      <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-teal-400 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-10" />
-                      
-                      {/* Category Name & Details displayed over image */}
-                      <div className="relative z-10 w-full flex flex-col justify-end">
-                        <h3 className="font-extrabold text-base sm:text-lg md:text-xl text-white mb-1.5 leading-snug group-hover:text-teal-300 transition-colors drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)]">
-                          {category.name}
-                        </h3>
-                        
-                        <div className="flex items-center justify-between mt-1">
-                          <span className="text-neutral-300 text-xs font-semibold drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">
-                            {itemCount} {itemCount === 1 ? 'Dish' : 'Dishes'}
-                          </span>
-                          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 group-hover:bg-teal-500 backdrop-blur-md flex items-center justify-center transition-all group-hover:translate-x-0.5 shadow-sm text-white">
-                            <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
-                          </div>
-                        </div>
-                      </div>
-                    </motion.button>
-                  )
+                      accentColor="teal"
+                    />
+                  );
                 })}
               </div>
             )}
@@ -563,11 +539,11 @@ export default function AlappuzhaMenu() {
 
               {/* Panel Header with common background */}
               <div className="relative px-6 py-5 md:py-7 md:px-8 border-b border-neutral-200 flex items-center justify-between sticky top-0 overflow-hidden z-10 bg-neutral-900 text-white">
-                <div className="absolute inset-0 z-0">
+                <div className="absolute inset-0 z-0 bg-neutral-900">
                   <img 
-                    src={activeCategory.imageUrl || activeCategory.image || COMMON_CATEGORY_BG} 
+                    src={optimizeImageUrl(activeCategory.imageUrl || activeCategory.image || COMMON_CATEGORY_BG, 600, 75)} 
                     alt={activeCategory.name} 
-                    loading="lazy"
+                    loading="eager"
                     decoding="async"
                     className="w-full h-full object-cover opacity-35" 
                   />

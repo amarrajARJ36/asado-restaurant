@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { UtensilsCrossed, Lock, Eye, EyeOff, ArrowRight, Delete, AlertCircle } from 'lucide-react';
+import FooterCopyright from './FooterCopyright';
 
 interface AdminPinLockProps {
   onUnlock: () => void;
@@ -210,6 +211,11 @@ export default function AdminPinLock({ onUnlock }: AdminPinLockProps) {
         >
           <span>&larr; Return to Customer Website</span>
         </Link>
+
+        {/* Footer Copyright */}
+        <div className="mt-8 pt-4 border-t border-neutral-800 text-center">
+          <FooterCopyright className="text-neutral-500 text-xs" />
+        </div>
       </div>
 
       <style>{`

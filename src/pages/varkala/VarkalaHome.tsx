@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { ArrowLeft, MapPin } from 'lucide-react';
 import { branches } from '../../data';
+import FooterCopyright from '../../components/FooterCopyright';
 
 export default function VarkalaHome() {
   const branch = branches.find(b => b.slug === 'varkala');
@@ -83,7 +84,7 @@ export default function VarkalaHome() {
 
       {/* Footer */}
       <footer className="relative z-10 p-6 text-center text-neutral-500 border-t border-white/10 bg-black/50 backdrop-blur-md">
-        <p className="uppercase tracking-widest text-xs">&copy; {new Date().getFullYear()} Asado Café. Stay Tuned.</p>
+        <FooterCopyright className="text-neutral-500 text-xs sm:text-sm" />
       </footer>
     </div>
   );
