@@ -40,13 +40,20 @@
         "name": { "type": "string", "maxLength": 100 },
         "price": { "type": "string", "maxLength": 20 },
         "category": { "type": "string", "maxLength": 50 },
+        "description": { "type": "string", "maxLength": 500 },
+        "imageUrl": { "type": "string" },
+        "image": { "type": "string" },
+        "isVeg": { "type": "boolean" },
+        "isChefRecommendation": { "type": "boolean" },
         "order": { "type": "number" },
         "status": { "type": "string", "maxLength": 20 },
         "isAvailable": { "type": "boolean" },
         "isDeleted": { "type": "boolean" },
         "isPurged": { "type": "boolean" },
         "deletedAt": { "type": "number" },
-        "branchSlug": { "type": "string", "maxLength": 50 }
+        "branchSlug": { "type": "string", "maxLength": 50 },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
       },
       "required": ["name", "price", "category", "branchSlug"]
     },

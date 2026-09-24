@@ -66,6 +66,7 @@ export default function BranchManager() {
   const menuFileInputRef = useRef<HTMLInputElement>(null);
   const newMenuFileInputRef = useRef<HTMLInputElement>(null);
   const editFileInputRef = useRef<HTMLInputElement>(null);
+  const targetMenuIdRef = useRef<string | null>(null);
   const [targetMenuId, setTargetMenuId] = useState<string | null>(null);
   const [uploadingMenuId, setUploadingMenuId] = useState<string | null>(null);
   const [newMenuName, setNewMenuName] = useState('');
@@ -147,11 +148,16 @@ export default function BranchManager() {
       const merged = rawBaseItems.map((staticItem: any) => {
         const dbItem = dbItemMap.get(staticItem.id);
         if (!dbItem) return { ...staticItem, isAvailable: staticItem.isAvailable !== false };
-        return {
+        const resolved: any = {
           ...staticItem,
           ...dbItem,
           isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false)
         };
+        if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
+          resolved.imageUrl = undefined;
+          resolved.image = undefined;
+        }
+        return resolved;
       });
 
       // Add custom items created in Firestore
@@ -496,49 +502,75 @@ export default function BranchManager() {
   };
 
   const triggerMenuUpload = (menuId: string) => {
+    targetMenuIdRef.current = menuId;
     setTargetMenuId(menuId);
-    if (menuFileInputRef.current) menuFileInputRef.current.click();
+    if (menuFileInputRef.current) {
+      menuFileInputRef.current.value = '';
+      menuFileInputRef.current.click();
+    }
   };
 
   const handleMenuImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    const menuId = targetMenuId;
-    if (!file || !branchId || !menuId) return;
+    const menuId = targetMenuIdRef.current || targetMenuId;
+    if (!file || !branchId || !menuId) {
+      console.warn("Upload aborted: missing file, branchId, or menuId", { file: !!file, branchId, menuId });
+      return;
+    }
 
     setUploadingMenuId(menuId);
     try {
-      if (!file.type.startsWith('image/')) {
-        alert("Please select a valid image file (JPG, PNG, WEBP).");
-        return;
-      }
-      // Compress image client-side to a crisp ~40-70KB Data URL (100% free direct to Firestore!)
-      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.75 });
+      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.72 });
       
-      await setDoc(doc(db, 'menuItems', menuId), { imageUrl: compressedDataUrl }, { merge: true });
+      const updateData: any = {
+        id: menuId,
+        imageUrl: compressedDataUrl,
+        image: compressedDataUrl,
+        branchSlug: branchId,
+        updatedAt: Date.now()
+      };
+
+      await setDoc(doc(db, 'menuItems', menuId), updateData, { merge: true });
+
+      // Immediately update local state so UI updates instantly
+      setMenuItems(prev => prev.map(m => m.id === menuId ? { ...m, imageUrl: compressedDataUrl, image: compressedDataUrl } : m));
     } catch (error) {
-      console.error(error);
-      alert("Image processing failed: " + (error as Error).message);
+      console.error("Menu image upload error:", error);
+      alert("Image upload failed: " + (error as Error).message);
     } finally {
       setUploadingMenuId(null);
       setTargetMenuId(null);
+      targetMenuIdRef.current = null;
       if (menuFileInputRef.current) menuFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveMenuImage = async (menuId: string) => {
+    if (!confirm("Remove this photo from the menu item?")) return;
+    try {
+      await setDoc(doc(db, 'menuItems', menuId), {
+        imageUrl: null,
+        image: null,
+        branchSlug: branchId,
+        updatedAt: Date.now()
+      }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === menuId ? { ...m, imageUrl: undefined, image: undefined } : m));
+    } catch (error) {
+      console.error("Failed to remove dish photo:", error);
+      alert("Could not remove photo: " + (error as Error).message);
     }
   };
 
   const handleNewMenuImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      alert("Please select a valid image file (JPG, PNG, WEBP).");
-      return;
-    }
     setCompressingNewMenuImage(true);
     try {
-      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.75 });
+      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.72 });
       setNewMenuImage(compressedDataUrl);
     } catch (error) {
       console.error(error);
-      alert("Failed to compress image: " + (error as Error).message);
+      alert("Failed to process image: " + (error as Error).message);
     } finally {
       setCompressingNewMenuImage(false);
       if (newMenuFileInputRef.current) newMenuFileInputRef.current.value = '';
@@ -546,25 +578,32 @@ export default function BranchManager() {
   };
 
   const handleAddMenu = async () => {
-    if (!newMenuName || !newMenuPrice || !newMenuCategory) return;
+    if (!newMenuName.trim() || !newMenuPrice.trim() || !newMenuCategory.trim()) {
+      alert("Please enter dish name, price, and category.");
+      return;
+    }
     const id = Date.now().toString();
     try {
       const catCount = menuItems.filter(m => m.category === newMenuCategory).length;
-      await setDoc(doc(db, 'menuItems', id), {
-        name: newMenuName,
-        price: newMenuPrice,
-        category: newMenuCategory,
+      const newItemData: any = {
+        id,
+        name: newMenuName.trim(),
+        price: newMenuPrice.trim(),
+        category: newMenuCategory.trim(),
         description: newMenuDescription.trim(),
         isVeg: newMenuIsVeg,
         isChefRecommendation: newMenuIsChefRec,
         isAvailable: true,
         isDeleted: false,
-        imageUrl: newMenuImage || null,
+        imageUrl: newMenuImage.trim() || null,
+        image: newMenuImage.trim() || null,
         order: catCount,
         status: 'active',
         branchSlug: branchId,
-        createdAt: Date.now()
-      });
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'menuItems', id), newItemData);
       setNewMenuName('');
       setNewMenuPrice('');
       setNewMenuDescription('');
@@ -658,7 +697,9 @@ export default function BranchManager() {
       return;
     }
     try {
+      const finalPhoto = editingItem.imageUrl?.trim() || null;
       const updatedData: any = {
+        id: editingItem.id,
         name: editingItem.name.trim(),
         price: editingItem.price.trim(),
         category: editingItem.category.trim(),
@@ -666,7 +707,8 @@ export default function BranchManager() {
         isVeg: Boolean(editingItem.isVeg),
         isChefRecommendation: Boolean(editingItem.isChefRecommendation),
         isAvailable: editingItem.isAvailable !== false,
-        imageUrl: editingItem.imageUrl || null,
+        imageUrl: finalPhoto,
+        image: finalPhoto,
         branchSlug: branchId,
         status: 'active',
         updatedAt: Date.now()
@@ -1424,25 +1466,35 @@ export default function BranchManager() {
                       {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
-                  <div className="w-40">
+                  <div className="w-64">
                     <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Photo (Optional)</label>
                     <input type="file" accept="image/*" ref={newMenuFileInputRef} onChange={handleNewMenuImageSelect} className="hidden" />
                     {newMenuImage ? (
                       <div className="flex items-center gap-2 h-[38px] px-2 bg-white border border-neutral-300 rounded-lg">
                         <img src={newMenuImage} alt="preview" className="w-6 h-6 rounded object-cover border border-neutral-200" />
                         <span className="text-xs text-green-700 font-medium truncate flex-1">Ready</span>
-                        <button type="button" onClick={() => setNewMenuImage('')} className="text-xs text-red-500 hover:text-red-700 font-bold px-1">✕</button>
+                        <button type="button" onClick={() => setNewMenuImage('')} className="text-xs text-red-500 hover:text-red-700 font-bold px-1" title="Remove photo">✕</button>
                       </div>
                     ) : (
-                      <button 
-                        type="button" 
-                        onClick={() => newMenuFileInputRef.current?.click()} 
-                        disabled={compressingNewMenuImage}
-                        className="w-full h-[38px] px-3 bg-white border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-50 flex items-center justify-center gap-1.5 transition-colors"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-neutral-500" />
-                        {compressingNewMenuImage ? 'Compressing...' : 'Add Photo'}
-                      </button>
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          type="button" 
+                          onClick={() => newMenuFileInputRef.current?.click()} 
+                          disabled={compressingNewMenuImage}
+                          className="h-[38px] px-3 bg-white border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-50 flex items-center justify-center gap-1.5 transition-colors shrink-0"
+                          title="Upload image from computer / mobile"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-amber-600" />
+                          <span>{compressingNewMenuImage ? 'Compressing...' : 'Upload'}</span>
+                        </button>
+                        <input
+                          type="url"
+                          placeholder="or paste URL"
+                          value={newMenuImage}
+                          onChange={e => setNewMenuImage(e.target.value)}
+                          className="flex-1 min-w-0 h-[38px] px-2.5 bg-white border border-neutral-300 rounded-lg text-xs text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
                     )}
                   </div>
                 </div>
@@ -1629,27 +1681,40 @@ export default function BranchManager() {
                                   </button>
                                 </td>
                                 <td className="px-4 py-3 text-center">
-                                  {item.imageUrl ? (
-                                    <div className="flex items-center justify-center gap-2">
-                                      <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
+                                  {(() => {
+                                    const itemPhoto = item.imageUrl || item.image;
+                                    const isUploading = uploadingMenuId === item.id;
+                                    return itemPhoto ? (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <img src={itemPhoto} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-xs border border-neutral-200" />
+                                        <div className="flex flex-col items-start">
+                                          <button 
+                                            onClick={() => triggerMenuUpload(item.id)} 
+                                            disabled={isUploading}
+                                            className="text-xs text-amber-600 hover:text-amber-800 font-medium underline disabled:opacity-50"
+                                          >
+                                            {isUploading ? 'Saving...' : 'Change'}
+                                          </button>
+                                          <button
+                                            onClick={() => handleRemoveMenuImage(item.id)}
+                                            className="text-[10px] text-red-500 hover:text-red-700 font-medium"
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
                                       <button 
                                         onClick={() => triggerMenuUpload(item.id)} 
-                                        disabled={uploadingMenuId === item.id}
-                                        className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                                        disabled={isUploading} 
+                                        className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-700 hover:text-amber-700 border border-neutral-300 hover:border-amber-400 bg-white hover:bg-amber-50/50 rounded-lg px-2.5 py-1.5 transition-colors shadow-2xs disabled:opacity-50"
+                                        title="Upload photo for this dish"
                                       >
-                                        {uploadingMenuId === item.id ? '...' : 'Change'}
+                                        <Upload className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>{isUploading ? 'Compressing...' : 'Upload'}</span>
                                       </button>
-                                    </div>
-                                  ) : (
-                                    <button 
-                                      onClick={() => triggerMenuUpload(item.id)} 
-                                      disabled={uploadingMenuId === item.id} 
-                                      className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
-                                    >
-                                      <Upload className="w-3 h-3" />
-                                      {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
-                                    </button>
-                                  )}
+                                    );
+                                  })()}
                                 </td>
                                 <td className="px-4 py-3 text-right whitespace-nowrap">
                                   <div className="flex items-center justify-end gap-2">
@@ -1859,27 +1924,40 @@ export default function BranchManager() {
                                           </button>
                                         </td>
                                         <td className="px-4 py-3 text-center">
-                                          {item.imageUrl ? (
-                                            <div className="flex items-center justify-center gap-2">
-                                              <img src={item.imageUrl} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-sm border border-neutral-200" />
+                                          {(() => {
+                                            const itemPhoto = item.imageUrl || item.image;
+                                            const isUploading = uploadingMenuId === item.id;
+                                            return itemPhoto ? (
+                                              <div className="flex items-center justify-center gap-2">
+                                                <img src={itemPhoto} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-xs border border-neutral-200" />
+                                                <div className="flex flex-col items-start">
+                                                  <button 
+                                                    onClick={() => triggerMenuUpload(item.id)} 
+                                                    disabled={isUploading}
+                                                    className="text-xs text-amber-600 hover:text-amber-800 font-medium underline disabled:opacity-50"
+                                                  >
+                                                    {isUploading ? 'Saving...' : 'Change'}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleRemoveMenuImage(item.id)}
+                                                    className="text-[10px] text-red-500 hover:text-red-700 font-medium"
+                                                  >
+                                                    Remove
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ) : (
                                               <button 
                                                 onClick={() => triggerMenuUpload(item.id)} 
-                                                disabled={uploadingMenuId === item.id}
-                                                className="text-xs text-amber-600 hover:text-amber-800 font-medium underline"
+                                                disabled={isUploading} 
+                                                className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-700 hover:text-amber-700 border border-neutral-300 hover:border-amber-400 bg-white hover:bg-amber-50/50 rounded-lg px-2.5 py-1.5 transition-colors shadow-2xs disabled:opacity-50"
+                                                title="Upload photo for this dish"
                                               >
-                                                {uploadingMenuId === item.id ? '...' : 'Change'}
+                                                <Upload className="w-3.5 h-3.5 text-amber-600" />
+                                                <span>{isUploading ? 'Compressing...' : 'Upload'}</span>
                                               </button>
-                                            </div>
-                                          ) : (
-                                            <button 
-                                              onClick={() => triggerMenuUpload(item.id)} 
-                                              disabled={uploadingMenuId === item.id} 
-                                              className="inline-flex items-center gap-1 text-xs text-neutral-600 hover:text-amber-600 border border-neutral-300 hover:border-amber-400 bg-white rounded-lg px-2.5 py-1.5 transition-colors"
-                                            >
-                                              <Upload className="w-3 h-3" />
-                                              {uploadingMenuId === item.id ? 'Compressing...' : 'Upload'}
-                                            </button>
-                                          )}
+                                            );
+                                          })()}
                                         </td>
                                         <td className="px-4 py-3 text-right whitespace-nowrap">
                                           <div className="flex items-center justify-end gap-2">
@@ -2362,7 +2440,10 @@ export default function BranchManager() {
 
                 {/* Photo management */}
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">Dish Photo</label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600">Dish Photo</label>
+                    <span className="text-[11px] text-neutral-400">Upload file or enter image link</span>
+                  </div>
                   <input 
                     type="file" 
                     accept="image/*" 
@@ -2372,41 +2453,69 @@ export default function BranchManager() {
                   />
                   {editingItem.imageUrl ? (
                     <div className="flex items-center gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-xl">
-                      <img src={editingItem.imageUrl} alt={editingItem.name} className="w-16 h-16 object-cover rounded-lg border border-neutral-300 shadow-sm" />
+                      <img 
+                        src={editingItem.imageUrl} 
+                        alt={editingItem.name} 
+                        className="w-16 h-16 object-cover rounded-lg border border-neutral-300 shadow-xs bg-white shrink-0" 
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&auto=format&fit=crop&q=60";
+                        }}
+                      />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs text-green-700 font-semibold block">Photo attached</span>
-                        <p className="text-[11px] text-neutral-400 truncate">Optimized and ready to save</p>
+                        <p className="text-[11px] text-neutral-400 truncate">Preview shown above. Ready to save.</p>
+                        <input
+                          type="text"
+                          value={editingItem.imageUrl.startsWith('data:') ? 'Compressed image ready' : editingItem.imageUrl}
+                          readOnly={editingItem.imageUrl.startsWith('data:')}
+                          onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
+                          placeholder="https://..."
+                          className="mt-1 w-full text-xs px-2 py-1 bg-white border border-neutral-200 rounded text-neutral-600 placeholder:text-neutral-400 outline-none"
+                        />
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-col gap-1.5 shrink-0">
                         <button
                           type="button"
                           onClick={() => editFileInputRef.current?.click()}
                           disabled={compressingEditImage}
-                          className="text-xs px-2.5 py-1.5 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-lg text-neutral-700 font-medium transition-colors"
+                          className="text-xs px-2.5 py-1.5 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-lg text-neutral-700 font-medium transition-colors text-center"
                         >
-                          Change
+                          {compressingEditImage ? '...' : 'Replace'}
                         </button>
                         <button
                           type="button"
                           onClick={() => setEditingItem({ ...editingItem, imageUrl: '' })}
-                          className="text-xs px-2.5 py-1.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-red-600 font-medium transition-colors"
+                          className="text-xs px-2.5 py-1.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-red-600 font-medium transition-colors text-center"
                         >
                           Remove
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => editFileInputRef.current?.click()}
-                      disabled={compressingEditImage}
-                      className="w-full py-4 border-2 border-dashed border-neutral-300 hover:border-amber-400 rounded-xl text-neutral-600 hover:text-amber-700 flex flex-col items-center justify-center gap-1.5 transition-colors bg-neutral-50/50"
-                    >
-                      <Camera className="w-5 h-5 text-neutral-400" />
-                      <span className="text-xs font-medium">
-                        {compressingEditImage ? 'Compressing image...' : 'Click to upload a dish photo'}
-                      </span>
-                    </button>
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => editFileInputRef.current?.click()}
+                        disabled={compressingEditImage}
+                        className="w-full py-3.5 border-2 border-dashed border-neutral-300 hover:border-amber-400 hover:bg-amber-50/20 rounded-xl text-neutral-600 hover:text-amber-700 flex flex-col items-center justify-center gap-1 transition-colors bg-neutral-50/50"
+                      >
+                        <Camera className="w-5 h-5 text-amber-600" />
+                        <span className="text-xs font-semibold text-neutral-800">
+                          {compressingEditImage ? 'Compressing image...' : 'Upload photo from device / camera'}
+                        </span>
+                        <span className="text-[11px] text-neutral-400">JPG, PNG, or WEBP (auto-compressed)</span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-neutral-400 uppercase font-medium">Or URL:</span>
+                        <input
+                          type="url"
+                          placeholder="Paste image link (https://...)"
+                          value={editingItem.imageUrl || ''}
+                          onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
+                          className="flex-1 text-xs px-3 py-1.5 bg-white border border-neutral-300 rounded-lg text-neutral-800 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
@@ -2616,9 +2725,9 @@ export default function BranchManager() {
                       className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200 flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        {item.imageUrl ? (
+                        {(item.imageUrl || item.image) ? (
                           <img
-                            src={item.imageUrl}
+                            src={item.imageUrl || item.image}
                             alt={item.name}
                             className="w-12 h-12 object-cover rounded-lg border border-neutral-200 shrink-0"
                           />

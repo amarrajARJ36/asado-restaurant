@@ -74,11 +74,16 @@ export default function AlappuzhaMenu() {
         const merged = staticAlappuzhaMenu.map((staticItem: any) => {
           const dbItem = dbItemMap.get(staticItem.id);
           if (!dbItem) return { ...staticItem, isAvailable: staticItem.isAvailable !== false };
-          return {
+          const resolved: any = {
             ...staticItem,
             ...dbItem,
             isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false)
           };
+          if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
+            resolved.imageUrl = undefined;
+            resolved.image = undefined;
+          }
+          return resolved;
         });
 
         // Add any custom items created in Firestore that aren't in static list
