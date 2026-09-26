@@ -10,6 +10,7 @@ import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
+import { getLocalDeletedIds, getLocalPurgedIds } from '../../lib/localMenuStore';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -20,7 +21,9 @@ export default function AlappuzhaMenu() {
   const [isDesktop, setIsDesktop] = useState(true);
   const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>(() => {
     const all = normalizeMenuItems(staticAlappuzhaMenu, staticAlappuzhaCategories);
-    return all.filter((item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
+    const localDeleted = getLocalDeletedIds('alappuzha');
+    const localPurged = getLocalPurgedIds('alappuzha');
+    return all.filter((item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
   });
   const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>(staticAlappuzhaCategories);
   const { banners } = useBanners('alappuzha');
@@ -43,7 +46,11 @@ export default function AlappuzhaMenu() {
 
   useEffect(() => {
     let latestCategories: any[] = staticAlappuzhaCategories;
-    let latestRawItems: any[] = staticAlappuzhaMenu;
+    const initialDeleted = getLocalDeletedIds('alappuzha');
+    const initialPurged = getLocalPurgedIds('alappuzha');
+    let latestRawItems: any[] = staticAlappuzhaMenu.filter(
+      (item: any) => !initialDeleted.has(item.id) && !initialPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+    );
 
     const unsubCat = onSnapshot(
       query(collection(db, 'categories'), where('branchSlug', '==', 'alappuzha')),
@@ -62,8 +69,14 @@ export default function AlappuzhaMenu() {
         latestCategories = activeCats;
         setAlappuzhaCategories(activeCats);
         preloadCategoryImages(activeCats);
-        // Re-normalize current dishes with latest categories
-        setAlappuzhaMenu(normalizeMenuItems(latestRawItems, activeCats));
+        
+        // Re-normalize current dishes with latest categories, ensuring deleted/purged items are filtered
+        const currentDeleted = getLocalDeletedIds('alappuzha');
+        const currentPurged = getLocalPurgedIds('alappuzha');
+        const filteredItems = latestRawItems.filter(
+          (item: any) => !currentDeleted.has(item.id) && !currentPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+        );
+        setAlappuzhaMenu(normalizeMenuItems(filteredItems, activeCats));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, 'categories');
@@ -104,12 +117,16 @@ export default function AlappuzhaMenu() {
         });
 
         // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
-        const activeItems = merged.filter((item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
+        const localDeleted = getLocalDeletedIds('alappuzha');
+        const localPurged = getLocalPurgedIds('alappuzha');
+        const activeItems = merged.filter(
+          (item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+        );
         latestRawItems = activeItems;
         setAlappuzhaMenu(normalizeMenuItems(activeItems, latestCategories));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'menuItems');
+        console.warn('Firestore alappuzhaMenu snapshot warning:', error);
       }
     );
 
@@ -288,8 +305,8 @@ export default function AlappuzhaMenu() {
                         </div>
 
                         {item.isChefRecommendation && (
-                          <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
-                            <Flame className="w-3 h-3" /> Chef Rec
+                          <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                            <Flame className="w-3 h-3" /> Chef Recommended
                           </span>
                         )}
 
@@ -445,8 +462,8 @@ export default function AlappuzhaMenu() {
                               </div>
 
                               {item.isChefRecommendation && (
-                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
-                                  <Flame className="w-3 h-3" /> Chef Rec
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                                  <Flame className="w-3 h-3" /> Chef Recommended
                                 </span>
                               )}
 
@@ -585,8 +602,8 @@ export default function AlappuzhaMenu() {
                         </div>
 
                         {item.isChefRecommendation && (
-                          <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
-                            <Flame className="w-3 h-3" /> Chef Rec
+                          <span className="inline-flex items-center gap-1 bg-teal-100 text-teal-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                            <Flame className="w-3 h-3" /> Chef Recommended
                           </span>
                         )}
 

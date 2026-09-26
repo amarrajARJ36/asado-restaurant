@@ -228,13 +228,13 @@ export default function BranchLayout({ branchSlug }: BranchLayoutProps) {
             {branch.slug === 'kollam' ? (
               <>
                 <p className="text-sm mb-2 text-neutral-400">Jaladarshini Lakeside Gardens, near Milma Diary, Palace Nagar, Thevally, Kollam, Kerala 691012</p>
-                <p className="text-sm mb-2 text-neutral-400">Phone/WhatsApp: <a href="tel:09061114112" className="hover:underline">09061114112</a></p>
+                <p className="text-sm mb-2 text-neutral-400">Phone/WhatsApp: <a href="https://wa.me/919061113114" target="_blank" rel="noreferrer" className="hover:underline">9061113114</a></p>
                 <p className="text-sm mb-2"><a href="https://maps.app.goo.gl/tycM4c3aJdQ1JanL6?g_st=aw" target="_blank" rel="noreferrer" className="text-amber-500 hover:underline">Google Maps</a></p>
               </>
             ) : branch.slug === 'alappuzha' ? (
               <>
                 <p className="text-sm mb-2 text-neutral-400">Asado Cafe, Erezha, Mullakkal, Alappuzha, Kerala 688011</p>
-                <p className="text-sm mb-2 text-neutral-400">Phone/WhatsApp: <a href="tel:+919876512345" className="hover:underline">+91 98765 12345</a></p>
+                <p className="text-sm mb-2 text-neutral-400">Phone/WhatsApp: <a href="https://wa.me/919061113114" target="_blank" rel="noreferrer" className="hover:underline">9061113114</a></p>
                 <p className="text-sm mb-2"><a href="https://maps.app.goo.gl/BTdeG8hUQJL4P2pU7?g_st=ac" target="_blank" rel="noreferrer" className="text-amber-500 hover:underline">Google Maps</a></p>
               </>
             ) : (

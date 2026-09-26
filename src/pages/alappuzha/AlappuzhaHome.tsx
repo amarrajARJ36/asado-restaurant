@@ -265,22 +265,14 @@ export default function AlappuzhaHome() {
                   className="w-full h-full object-cover"
                 />
               </div>
-              <div className="md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-center z-10">
-                <h4 className="text-3xl font-serif text-slate-900 mb-4">{recommendedBoat.title}</h4>
-                <p className="text-slate-600 font-light leading-relaxed mb-8 text-lg">
-                  {recommendedBoat.desc}
-                </p>
-                <div className="flex flex-wrap gap-3 mb-10">
-                  {recommendedBoat.tags.map((tag, i) => (
-                    <span key={i} className="inline-flex items-center gap-2 bg-white text-teal-700 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider border border-teal-700/20">
-                      <CheckCircle2 className="w-3 h-3" /> {tag}
-                    </span>
-                  ))}
-                </div>
+              <div className="md:w-1/2 p-8 md:p-12 lg:p-16 flex flex-col justify-center items-start z-10">
+                <h4 className="text-3xl font-serif text-slate-900 mb-8">{recommendedBoat.title}</h4>
                 <div>
                   <a 
-                    href="#contact"
-                    className="inline-flex items-center gap-2 bg-teal-700 text-white px-8 py-3 rounded-full font-bold uppercase tracking-widest text-xs hover:bg-teal-600 transition-colors"
+                    href="https://wa.me/919061113114?text=Hello%20Asado,%20I%20would%20like%20to%20enquire%20about%20the%20Houseboat%20booking"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-2 bg-teal-700 text-white px-8 py-4 rounded-full font-bold uppercase tracking-widest text-xs hover:bg-teal-600 transition-colors shadow-md"
                   >
                     Enquire Now
                   </a>
@@ -315,9 +307,8 @@ export default function AlappuzhaHome() {
             <div className="grid gap-6">
               {[
                 { title: 'Dedicated Space', desc: 'Reserved area decorated with balloons and custom themes.' },
-                { title: 'Custom Cake', desc: 'Complimentary celebration cake for groups over 10.' },
-                { title: 'Special Menu', desc: 'Tailored buffet or unlimited a la carte options.' },
-                { title: 'Live Entertainment', desc: 'Arrangements for live music or DJ upon request.' }
+                { title: 'Custom Cake', desc: 'Customised cakes available on request.' },
+                { title: 'Live Entertainment', desc: 'Live background music to complement your celebration.' }
               ].map((item, i) => (
                 <div key={i} className="flex gap-4 items-start">
                   <div className="w-8 h-8 rounded-full bg-teal-700/10 border border-teal-700/30 flex items-center justify-center shrink-0 mt-1">
@@ -458,11 +449,11 @@ export default function AlappuzhaHome() {
                 <div>
                   <h4 className="text-teal-900 font-bold uppercase tracking-wider text-sm mb-4">Restaurant Enquiries</h4>
                   <div className="flex flex-col gap-4">
-                    <a href="tel:+919876512345" className="flex items-center gap-4 text-slate-600 hover:text-teal-700 transition-colors">
+                    <a href="tel:9061113114" className="flex items-center gap-4 text-slate-600 hover:text-teal-700 transition-colors">
                       <div className="w-10 h-10 rounded-full border border-teal-700/30 flex items-center justify-center shrink-0">
                         <Phone className="w-4 h-4" />
                       </div>
-                      <span className="font-light">+91 98765 12345</span>
+                      <span className="font-light">9061113114</span>
                     </a>
                   </div>
                 </div>
@@ -470,14 +461,14 @@ export default function AlappuzhaHome() {
                   <h4 className="text-teal-900 font-bold uppercase tracking-wider text-sm mb-4">Houseboat Enquiries</h4>
                   <div className="flex flex-col sm:flex-row gap-4">
                     <a 
-                      href="tel:+919876512345"
+                      href="tel:9061113114"
                       className="flex-1 flex items-center justify-center gap-2 border border-teal-700/30 py-3 rounded-full text-slate-600 hover:border-teal-700 hover:text-teal-700 transition-all"
                     >
                       <Phone className="w-4 h-4" />
-                      <span className="text-sm font-medium uppercase tracking-wider">Call</span>
+                      <span className="text-sm font-medium uppercase tracking-wider">Call (9061113114)</span>
                     </a>
                     <a 
-                      href="https://wa.me/919876512345"
+                      href="https://wa.me/919061113114?text=Hello%20Asado,%20I%20would%20like%20to%20enquire%20about%20the%20Houseboat%20booking"
                       target="_blank"
                       rel="noreferrer"
                       className="flex-1 flex items-center justify-center gap-2 bg-[#25D366]/10 border border-[#25D366]/30 py-3 rounded-full text-[#25D366] hover:bg-[#25D366] hover:text-black transition-all"

@@ -151,7 +151,7 @@ export default function KollamHome() {
               </div>
             </Link>
             
-            <Link to="/kollam/events" className="group block relative rounded-2xl overflow-hidden aspect-square bg-neutral-800">
+            <Link to="/kollam/celebrations" className="group block relative rounded-2xl overflow-hidden aspect-square bg-neutral-800">
               <img src="https://images.unsplash.com/photo-1519167758481-83f550bb49b3?q=80&w=3298&auto=format&fit=crop" className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" alt="Events & Decorations" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
               <div className="absolute inset-0 p-8 flex flex-col justify-end">
@@ -227,7 +227,7 @@ export default function KollamHome() {
                   <div>
                     <h4 className="font-semibold text-lg text-neutral-900">WhatsApp</h4>
                     <p className="text-neutral-500">
-                      <a href="https://wa.me/91906113114" target="_blank" rel="noreferrer" className="hover:underline text-[#25D366]">0906113114</a>
+                      <a href="https://wa.me/919061113114" target="_blank" rel="noreferrer" className="hover:underline text-[#25D366]">9061113114</a>
                     </p>
                   </div>
                 </div>

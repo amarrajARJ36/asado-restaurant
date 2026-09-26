@@ -52,12 +52,10 @@ export default function AdminLayout() {
   }, [location.pathname]);
 
   const handleLogout = () => {
-    if (confirm("Are you sure you want to log out of the admin panel?")) {
-      localStorage.removeItem('asado_admin_auth');
-      sessionStorage.removeItem('asado_admin_auth');
-      setIsAuthenticated(false);
-      navigate('/admin');
-    }
+    localStorage.removeItem('asado_admin_auth');
+    sessionStorage.removeItem('asado_admin_auth');
+    setIsAuthenticated(false);
+    navigate('/admin');
   };
 
   if (!isAuthenticated) {

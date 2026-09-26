@@ -256,14 +256,14 @@ export default function KollamCruise() {
             
             <div className="flex flex-col sm:flex-row justify-center gap-6 relative z-10">
               <a 
-                href="tel:09061114112"
+                href="tel:9061113114"
                 className="flex items-center justify-center gap-3 bg-amber-600 text-white px-8 py-4 font-bold uppercase tracking-widest text-xs hover:bg-amber-700 transition-colors"
               >
                 <Phone className="w-4 h-4" />
                 Call Now
               </a>
               <a 
-                href="https://wa.me/91906113114"
+                href="https://wa.me/919061113114?text=Hello%20Asado,%20I%20would%20like%20to%20book%20a%20Cruise"
                 target="_blank"
                 rel="noreferrer"
                 className="flex items-center justify-center gap-3 bg-[#25D366] text-white px-8 py-4 font-bold uppercase tracking-widest text-xs hover:bg-[#20bd5a] transition-colors"

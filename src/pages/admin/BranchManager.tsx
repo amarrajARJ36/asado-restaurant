@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
 import { useBanners, Banner } from '../../hooks/useBanners';
 import { resolveItemCategory, normalizeMenuItems } from '../../lib/categoryUtils';
+import { getLocalDeletedIds, setLocalDeletedId, getLocalPurgedIds, setLocalPurgedId } from '../../lib/localMenuStore';
 
 export default function BranchManager() {
   const { branchId } = useParams();
@@ -37,7 +38,14 @@ export default function BranchManager() {
   const [menuViewMode, setMenuViewMode] = useState<'grouped' | 'table'>('grouped');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [reorderSaving, setReorderSaving] = useState(false);
-  const [deletedItems, setDeletedItems] = useState<any[]>([]);
+  const [deletedItems, setDeletedItems] = useState<any[]>(() => {
+    const raw = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
+    const cats = branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
+    const localDeleted = getLocalDeletedIds(branchId || '');
+    const localPurged = getLocalPurgedIds(branchId || '');
+    const deleted = raw.filter((item: any) => localDeleted.has(item.id) && !localPurged.has(item.id));
+    return normalizeMenuItems(deleted, cats);
+  });
   const [showTrashModal, setShowTrashModal] = useState(false);
 
   // Gallery State
@@ -61,7 +69,10 @@ export default function BranchManager() {
   const [menuItems, setMenuItems] = useState<any[]>(() => {
     const raw = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
     const cats = branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
-    return normalizeMenuItems(raw, cats);
+    const localDeleted = getLocalDeletedIds(branchId || '');
+    const localPurged = getLocalPurgedIds(branchId || '');
+    const active = raw.filter((item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id));
+    return normalizeMenuItems(active, cats);
   });
   const menuFileInputRef = useRef<HTMLInputElement>(null);
   const newMenuFileInputRef = useRef<HTMLInputElement>(null);
@@ -143,15 +154,29 @@ export default function BranchManager() {
       const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const currentCats = categories.length > 0 ? categories : rawBaseCategories;
       const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
+      const localDeleted = getLocalDeletedIds(branchId || '');
+      const localPurged = getLocalPurgedIds(branchId || '');
 
       // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
       const merged = rawBaseItems.map((staticItem: any) => {
         const dbItem = dbItemMap.get(staticItem.id);
-        if (!dbItem) return { ...staticItem, isAvailable: staticItem.isAvailable !== false };
+        const isLocallyDeleted = localDeleted.has(staticItem.id);
+        const isLocallyPurged = localPurged.has(staticItem.id);
+
+        if (!dbItem) {
+          return { 
+            ...staticItem, 
+            isAvailable: staticItem.isAvailable !== false,
+            isDeleted: isLocallyDeleted,
+            isPurged: isLocallyPurged
+          };
+        }
         const resolved: any = {
           ...staticItem,
           ...dbItem,
-          isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false)
+          isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
+          isDeleted: dbItem.isDeleted === true || isLocallyDeleted,
+          isPurged: dbItem.isPurged === true || isLocallyPurged
         };
         if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
           resolved.imageUrl = undefined;
@@ -164,9 +189,13 @@ export default function BranchManager() {
       const existingIds = new Set(rawBaseItems.map((i: any) => i.id));
       dbItems.forEach((item: any) => {
         if (!existingIds.has(item.id)) {
+          const isLocallyDeleted = localDeleted.has(item.id);
+          const isLocallyPurged = localPurged.has(item.id);
           merged.push({
             ...item,
-            isAvailable: item.isAvailable !== false
+            isAvailable: item.isAvailable !== false,
+            isDeleted: item.isDeleted === true || isLocallyDeleted,
+            isPurged: item.isPurged === true || isLocallyPurged
           });
         }
       });
@@ -186,7 +215,7 @@ export default function BranchManager() {
       setMenuItems(normalizeMenuItems(activeList, currentCats));
       setDeletedItems(normalizeMenuItems(deletedList, currentCats));
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'menuItems');
+      console.warn('Firestore menuItems snapshot warning:', error);
     });
 
     const qCat = query(collection(db, 'categories'), where('branchSlug', '==', branchId));
@@ -546,7 +575,6 @@ export default function BranchManager() {
   };
 
   const handleRemoveMenuImage = async (menuId: string) => {
-    if (!confirm("Remove this photo from the menu item?")) return;
     try {
       await setDoc(doc(db, 'menuItems', menuId), {
         imageUrl: null,
@@ -557,7 +585,6 @@ export default function BranchManager() {
       setMenuItems(prev => prev.map(m => m.id === menuId ? { ...m, imageUrl: undefined, image: undefined } : m));
     } catch (error) {
       console.error("Failed to remove dish photo:", error);
-      alert("Could not remove photo: " + (error as Error).message);
     }
   };
 
@@ -579,7 +606,6 @@ export default function BranchManager() {
 
   const handleAddMenu = async () => {
     if (!newMenuName.trim() || !newMenuPrice.trim() || !newMenuCategory.trim()) {
-      alert("Please enter dish name, price, and category.");
       return;
     }
     const id = Date.now().toString();
@@ -604,6 +630,7 @@ export default function BranchManager() {
         updatedAt: Date.now()
       };
       await setDoc(doc(db, 'menuItems', id), newItemData);
+      setMenuItems(prev => [...prev, newItemData]);
       setNewMenuName('');
       setNewMenuPrice('');
       setNewMenuDescription('');
@@ -722,26 +749,34 @@ export default function BranchManager() {
   };
 
   const handleRemoveMenu = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this menu item? It will be removed from the public menu and active management.')) return;
     try {
-      await setDoc(doc(db, 'menuItems', id), {
-        isDeleted: true,
-        deletedAt: Date.now(),
-        branchSlug: branchId
-      }, { merge: true });
+      setLocalDeletedId(branchId || '', id, true);
       const itemToDelete = menuItems.find(m => m.id === id);
       setMenuItems(prev => prev.filter(m => m.id !== id));
       if (itemToDelete) {
         setDeletedItems(prev => [{ ...itemToDelete, isDeleted: true, deletedAt: Date.now() }, ...prev.filter(d => d.id !== id)]);
       }
+      await setDoc(doc(db, 'menuItems', id), {
+        id,
+        isDeleted: true,
+        deletedAt: Date.now(),
+        branchSlug: branchId
+      }, { merge: true });
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `menuItems/${id}`);
+      console.warn('Firestore write warning:', e);
     }
   };
 
   const handleRestoreMenu = async (id: string) => {
     try {
+      setLocalDeletedId(branchId || '', id, false);
+      const itemToRestore = deletedItems.find(d => d.id === id);
+      setDeletedItems(prev => prev.filter(d => d.id !== id));
+      if (itemToRestore) {
+        setMenuItems(prev => [...prev, { ...itemToRestore, isDeleted: false, isPurged: false }]);
+      }
       await setDoc(doc(db, 'menuItems', id), {
+        id,
         isDeleted: false,
         isPurged: false,
         status: 'active',
@@ -749,19 +784,16 @@ export default function BranchManager() {
         branchSlug: branchId,
         updatedAt: Date.now()
       }, { merge: true });
-      const itemToRestore = deletedItems.find(d => d.id === id);
-      setDeletedItems(prev => prev.filter(d => d.id !== id));
-      if (itemToRestore) {
-        setMenuItems(prev => [...prev, { ...itemToRestore, isDeleted: false, isPurged: false }]);
-      }
     } catch (e) {
-      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${id}`);
+      console.warn('Firestore write warning:', e);
     }
   };
 
   const handlePermanentDeleteMenu = async (id: string) => {
-    if (!confirm('Permanently purge this item from history? This cannot be undone.')) return;
     try {
+      setLocalPurgedId(branchId || '', id);
+      setLocalDeletedId(branchId || '', id, true);
+      setDeletedItems(prev => prev.filter(d => d.id !== id));
       const isBaseItem = rawBaseItems.some((i: any) => i.id === id);
       if (isBaseItem) {
         await setDoc(doc(db, 'menuItems', id), {
@@ -774,9 +806,8 @@ export default function BranchManager() {
       } else {
         await deleteDoc(doc(db, 'menuItems', id));
       }
-      setDeletedItems(prev => prev.filter(d => d.id !== id));
     } catch (e) {
-      handleFirestoreError(e, OperationType.DELETE, `menuItems/${id}`);
+      console.warn('Firestore write warning:', e);
     }
   };
 
@@ -853,7 +884,6 @@ export default function BranchManager() {
   };
 
   const handleRemoveCategoryPhoto = async (cat: any) => {
-    if (!confirm(`Remove background photo from category "${cat.name}"? It will revert to the default culinary background.`)) return;
     try {
       const updateData = {
         image: null,
@@ -910,7 +940,6 @@ export default function BranchManager() {
   };
 
   const handleRemoveCategory = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this category? Dishes in this category may be affected.')) return;
     try {
       const isBaseCat = rawBaseCategories.some((c: any) => c.id === id);
       if (isBaseCat) {
@@ -1538,7 +1567,7 @@ export default function BranchManager() {
                         title="Click to toggle Chef's Recommendation"
                       >
                         <Flame className={`w-3.5 h-3.5 ${newMenuIsChefRec ? 'text-amber-600 fill-amber-500' : 'text-neutral-400'}`} />
-                        <span>Chef Rec</span>
+                        <span>Chef Recommended</span>
                       </button>
                     </div>
                   </div>
@@ -1620,7 +1649,7 @@ export default function BranchManager() {
                                         <span>{item.name}</span>
                                         {item.isChefRecommendation && (
                                           <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                                            <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                            <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Recommended
                                           </span>
                                         )}
                                         {!isAvailable && (
@@ -1863,7 +1892,7 @@ export default function BranchManager() {
                                                 <span>{item.name}</span>
                                                 {item.isChefRecommendation && (
                                                   <span className="inline-flex items-center gap-0.5 bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">
-                                                    <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Rec
+                                                    <Flame className="w-2.5 h-2.5 text-amber-600 fill-amber-500" /> Chef Recommended
                                                   </span>
                                                 )}
                                                 {!isAvailable && (

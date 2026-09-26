@@ -42,17 +42,17 @@ export default function MainHome() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.4 }}
-            className="text-xl md:text-3xl font-light text-neutral-300 mb-2"
+            className="text-xl md:text-3xl font-light text-neutral-200 mb-2 font-serif italic"
           >
-            More Than a Restaurant.
+            An Experience.
           </motion.p>
           <motion.p 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.5 }}
-            className="text-lg md:text-2xl font-light text-neutral-400 mb-12 font-serif italic"
+            className="text-lg md:text-2xl font-light text-neutral-400 mb-12"
           >
-            An Experience.
+            More than a Restaurant.
           </motion.p>
 
           <motion.button

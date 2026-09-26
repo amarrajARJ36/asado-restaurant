@@ -254,14 +254,14 @@ export default function KollamCelebrations() {
               
               <div className="flex flex-col sm:flex-row justify-center gap-6">
                 <a 
-                  href="tel:09061114112"
+                  href="tel:9061113114"
                   className="group flex items-center justify-center gap-3 bg-[#D4AF37] text-[#0F1115] px-8 py-4 rounded-full font-bold uppercase tracking-widest text-xs hover:bg-transparent hover:text-[#D4AF37] border-2 border-[#D4AF37] transition-all duration-300"
                 >
                   <Phone className="w-4 h-4" />
                   Call Now
                 </a>
                 <a 
-                  href="https://wa.me/91906113114"
+                  href="https://wa.me/919061113114?text=Hello%20Asado,%20I%20would%20like%20to%20plan%20a%20celebration"
                   target="_blank"
                   rel="noreferrer"
                   className="group flex items-center justify-center gap-3 bg-transparent border-2 border-[#D4AF37] text-[#D4AF37] px-8 py-4 rounded-full font-bold uppercase tracking-widest text-xs hover:bg-[#D4AF37] hover:text-[#0F1115] transition-all duration-300"

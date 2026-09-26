@@ -35,6 +35,12 @@ export default function App() {
           <Route path="menu" element={<KollamMenu />} />
           <Route path="cruise" element={<KollamCruise />} />
           <Route path="celebrations" element={<KollamCelebrations />} />
+          <Route path="decor" element={<Navigate to="/kollam/celebrations" replace />} />
+          <Route path="decoration" element={<Navigate to="/kollam/celebrations" replace />} />
+          <Route path="decorations" element={<Navigate to="/kollam/celebrations" replace />} />
+          <Route path="events" element={<Navigate to="/kollam/celebrations" replace />} />
+          <Route path="events-and-decorations" element={<Navigate to="/kollam/celebrations" replace />} />
+          <Route path="events-and-decoration" element={<Navigate to="/kollam/celebrations" replace />} />
           <Route path="gallery" element={<KollamGallery />} />
         </Route>
 

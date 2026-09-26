@@ -10,6 +10,7 @@ import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { useBanners } from '../../hooks/useBanners';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
+import { getLocalDeletedIds, getLocalPurgedIds } from '../../lib/localMenuStore';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -20,7 +21,9 @@ export default function KollamMenu() {
   const [isDesktop, setIsDesktop] = useState(true);
   const [kollamMenu, setKollamMenu] = useState<any[]>(() => {
     const all = normalizeMenuItems(staticKollamMenu, staticKollamCategories);
-    return all.filter((item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
+    const localDeleted = getLocalDeletedIds('kollam');
+    const localPurged = getLocalPurgedIds('kollam');
+    return all.filter((item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
   });
   const [kollamCategories, setKollamCategories] = useState<any[]>(staticKollamCategories);
   const { banners } = useBanners('kollam');
@@ -37,7 +40,11 @@ export default function KollamMenu() {
 
   useEffect(() => {
     let latestCategories: any[] = staticKollamCategories;
-    let latestRawItems: any[] = staticKollamMenu;
+    const initialDeleted = getLocalDeletedIds('kollam');
+    const initialPurged = getLocalPurgedIds('kollam');
+    let latestRawItems: any[] = staticKollamMenu.filter(
+      (item: any) => !initialDeleted.has(item.id) && !initialPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+    );
 
     const unsubCat = onSnapshot(
       query(collection(db, 'categories'), where('branchSlug', '==', 'kollam')),
@@ -56,8 +63,14 @@ export default function KollamMenu() {
         latestCategories = activeCats;
         setKollamCategories(activeCats);
         preloadCategoryImages(activeCats);
-        // Re-normalize current dishes with latest categories
-        setKollamMenu(normalizeMenuItems(latestRawItems, activeCats));
+        
+        // Re-normalize current dishes with latest categories, ensuring deleted/purged items are filtered
+        const currentDeleted = getLocalDeletedIds('kollam');
+        const currentPurged = getLocalPurgedIds('kollam');
+        const filteredItems = latestRawItems.filter(
+          (item: any) => !currentDeleted.has(item.id) && !currentPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+        );
+        setKollamMenu(normalizeMenuItems(filteredItems, activeCats));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, 'categories');
@@ -98,12 +111,16 @@ export default function KollamMenu() {
         });
 
         // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
-        const activeItems = merged.filter((item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
+        const localDeleted = getLocalDeletedIds('kollam');
+        const localPurged = getLocalPurgedIds('kollam');
+        const activeItems = merged.filter(
+          (item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+        );
         latestRawItems = activeItems;
         setKollamMenu(normalizeMenuItems(activeItems, latestCategories));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'menuItems');
+        console.warn('Firestore kollamMenu snapshot warning:', error);
       }
     );
 
@@ -253,8 +270,8 @@ export default function KollamMenu() {
                         </div>
 
                         {item.isChefRecommendation && (
-                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
-                            <Flame className="w-3 h-3" /> Chef Rec
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                            <Flame className="w-3 h-3" /> Chef Recommended
                           </span>
                         )}
 
@@ -396,8 +413,8 @@ export default function KollamMenu() {
                         </div>
 
                         {item.isChefRecommendation && (
-                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
-                            <Flame className="w-3 h-3" /> Chef Rec
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider mb-1.5">
+                            <Flame className="w-3 h-3" /> Chef Recommended
                           </span>
                         )}
 
