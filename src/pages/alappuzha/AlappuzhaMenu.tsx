@@ -10,7 +10,7 @@ import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
-import { getLocalDeletedIds, getLocalPurgedIds } from '../../lib/localMenuStore';
+import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId } from '../../lib/localMenuStore';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -19,6 +19,7 @@ export default function AlappuzhaMenu() {
   const [selectedDish, setSelectedDish] = useState<any | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
+  const [menuLoading, setMenuLoading] = useState(true);
   const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>(() => {
     const all = normalizeMenuItems(staticAlappuzhaMenu, staticAlappuzhaCategories);
     const localDeleted = getLocalDeletedIds('alappuzha');
@@ -66,17 +67,15 @@ export default function AlappuzhaMenu() {
           if (!existingIds.has(cat.id)) merged.push(cat);
         });
         const activeCats = merged.filter((cat: any) => cat.isDeleted !== true);
-        latestCategories = activeCats;
-        setAlappuzhaCategories(activeCats);
-        preloadCategoryImages(activeCats);
+        latestCategories = activeCats.length > 0 ? activeCats : staticAlappuzhaCategories;
+        setAlappuzhaCategories(latestCategories);
+        preloadCategoryImages(latestCategories);
         
         // Re-normalize current dishes with latest categories, ensuring deleted/purged items are filtered
-        const currentDeleted = getLocalDeletedIds('alappuzha');
-        const currentPurged = getLocalPurgedIds('alappuzha');
         const filteredItems = latestRawItems.filter(
-          (item: any) => !currentDeleted.has(item.id) && !currentPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+          (item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
         );
-        setAlappuzhaMenu(normalizeMenuItems(filteredItems, activeCats));
+        setAlappuzhaMenu(normalizeMenuItems(filteredItems, latestCategories));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, 'categories');
@@ -89,14 +88,37 @@ export default function AlappuzhaMenu() {
         const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
 
+        const localDeleted = getLocalDeletedIds('alappuzha');
+        const localPurged = getLocalPurgedIds('alappuzha');
+
         // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
         const merged = staticAlappuzhaMenu.map((staticItem: any) => {
           const dbItem = dbItemMap.get(staticItem.id);
-          if (!dbItem) return { ...staticItem, isAvailable: staticItem.isAvailable !== false };
+          const isLocallyDeleted = localDeleted.has(staticItem.id);
+          const isLocallyPurged = localPurged.has(staticItem.id);
+
+          if (!dbItem) {
+            return { 
+              ...staticItem, 
+              isAvailable: staticItem.isAvailable !== false,
+              isDeleted: isLocallyDeleted,
+              isPurged: isLocallyPurged
+            };
+          }
+
+          const isDeleted = dbItem.isDeleted !== undefined ? Boolean(dbItem.isDeleted) : isLocallyDeleted;
+          const isPurged = dbItem.isPurged !== undefined ? Boolean(dbItem.isPurged) : isLocallyPurged;
+
+          if (dbItem.isDeleted === false && isLocallyDeleted) {
+            setLocalDeletedId('alappuzha', staticItem.id, false);
+          }
+
           const resolved: any = {
             ...staticItem,
             ...dbItem,
-            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false)
+            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
+            isDeleted,
+            isPurged
           };
           if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
             resolved.imageUrl = undefined;
@@ -109,24 +131,35 @@ export default function AlappuzhaMenu() {
         const existingIds = new Set(staticAlappuzhaMenu.map((i: any) => i.id));
         dbItems.forEach((item: any) => {
           if (!existingIds.has(item.id)) {
+            const isLocallyDeleted = localDeleted.has(item.id);
+            const isLocallyPurged = localPurged.has(item.id);
+            const isDeleted = item.isDeleted !== undefined ? Boolean(item.isDeleted) : isLocallyDeleted;
+            const isPurged = item.isPurged !== undefined ? Boolean(item.isPurged) : isLocallyPurged;
+
+            if (item.isDeleted === false && isLocallyDeleted) {
+              setLocalDeletedId('alappuzha', item.id, false);
+            }
+
             merged.push({
               ...item,
-              isAvailable: item.isAvailable !== false
+              isAvailable: item.isAvailable !== false,
+              isDeleted,
+              isPurged
             });
           }
         });
 
         // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
-        const localDeleted = getLocalDeletedIds('alappuzha');
-        const localPurged = getLocalPurgedIds('alappuzha');
         const activeItems = merged.filter(
-          (item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+          (item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
         );
         latestRawItems = activeItems;
         setAlappuzhaMenu(normalizeMenuItems(activeItems, latestCategories));
+        setMenuLoading(false);
       },
       (error) => {
         console.warn('Firestore alappuzhaMenu snapshot warning:', error);
+        setMenuLoading(false);
       }
     );
 
@@ -504,10 +537,28 @@ export default function AlappuzhaMenu() {
                 ))}
 
                 {categoryWiseMenu.length === 0 && (
-                  <div className="text-center py-16 bg-white rounded-2xl border border-neutral-200 text-neutral-500">
-                    <p className="text-base font-semibold text-neutral-800">No dishes found</p>
-                    <p className="text-xs text-neutral-400 mt-1">Try selecting another category or clear your search.</p>
-                  </div>
+                  menuLoading ? (
+                    <div className="space-y-4 py-4">
+                      <div className="h-8 bg-neutral-200/60 rounded-xl animate-pulse w-48 mb-6" />
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {[1, 2, 3, 4].map((n) => (
+                          <div key={n} className="h-28 bg-white border border-neutral-100 rounded-2xl p-4 shadow-xs animate-pulse flex items-center justify-between">
+                            <div className="space-y-2 flex-1">
+                              <div className="h-4 bg-neutral-200 rounded w-1/2" />
+                              <div className="h-3 bg-neutral-100 rounded w-3/4" />
+                              <div className="h-4 bg-neutral-200 rounded w-16" />
+                            </div>
+                            <div className="w-16 h-16 bg-neutral-200 rounded-xl shrink-0 ml-4" />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-16 bg-white rounded-2xl border border-neutral-200 text-neutral-500">
+                      <p className="text-base font-semibold text-neutral-800">No dishes found</p>
+                      <p className="text-xs text-neutral-400 mt-1">Try selecting another category or clear your search.</p>
+                    </div>
+                  )
                 )}
               </div>
             ) : (

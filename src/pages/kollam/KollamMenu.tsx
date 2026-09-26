@@ -10,7 +10,7 @@ import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { useBanners } from '../../hooks/useBanners';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
-import { getLocalDeletedIds, getLocalPurgedIds } from '../../lib/localMenuStore';
+import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId } from '../../lib/localMenuStore';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -83,14 +83,37 @@ export default function KollamMenu() {
         const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
 
+        const localDeleted = getLocalDeletedIds('kollam');
+        const localPurged = getLocalPurgedIds('kollam');
+
         // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
         const merged = staticKollamMenu.map((staticItem: any) => {
           const dbItem = dbItemMap.get(staticItem.id);
-          if (!dbItem) return { ...staticItem, isAvailable: staticItem.isAvailable !== false };
+          const isLocallyDeleted = localDeleted.has(staticItem.id);
+          const isLocallyPurged = localPurged.has(staticItem.id);
+
+          if (!dbItem) {
+            return { 
+              ...staticItem, 
+              isAvailable: staticItem.isAvailable !== false,
+              isDeleted: isLocallyDeleted,
+              isPurged: isLocallyPurged
+            };
+          }
+
+          const isDeleted = dbItem.isDeleted !== undefined ? Boolean(dbItem.isDeleted) : isLocallyDeleted;
+          const isPurged = dbItem.isPurged !== undefined ? Boolean(dbItem.isPurged) : isLocallyPurged;
+
+          if (dbItem.isDeleted === false && isLocallyDeleted) {
+            setLocalDeletedId('kollam', staticItem.id, false);
+          }
+
           const resolved: any = {
             ...staticItem,
             ...dbItem,
-            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false)
+            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
+            isDeleted,
+            isPurged
           };
           if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
             resolved.imageUrl = undefined;
@@ -103,18 +126,27 @@ export default function KollamMenu() {
         const existingIds = new Set(staticKollamMenu.map((i: any) => i.id));
         dbItems.forEach((item: any) => {
           if (!existingIds.has(item.id)) {
+            const isLocallyDeleted = localDeleted.has(item.id);
+            const isLocallyPurged = localPurged.has(item.id);
+            const isDeleted = item.isDeleted !== undefined ? Boolean(item.isDeleted) : isLocallyDeleted;
+            const isPurged = item.isPurged !== undefined ? Boolean(item.isPurged) : isLocallyPurged;
+
+            if (item.isDeleted === false && isLocallyDeleted) {
+              setLocalDeletedId('kollam', item.id, false);
+            }
+
             merged.push({
               ...item,
-              isAvailable: item.isAvailable !== false
+              isAvailable: item.isAvailable !== false,
+              isDeleted,
+              isPurged
             });
           }
         });
 
         // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
-        const localDeleted = getLocalDeletedIds('kollam');
-        const localPurged = getLocalPurgedIds('kollam');
         const activeItems = merged.filter(
-          (item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+          (item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
         );
         latestRawItems = activeItems;
         setKollamMenu(normalizeMenuItems(activeItems, latestCategories));

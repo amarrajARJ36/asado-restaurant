@@ -171,12 +171,20 @@ export default function BranchManager() {
             isPurged: isLocallyPurged
           };
         }
+
+        const isDeleted = dbItem.isDeleted !== undefined ? Boolean(dbItem.isDeleted) : isLocallyDeleted;
+        const isPurged = dbItem.isPurged !== undefined ? Boolean(dbItem.isPurged) : isLocallyPurged;
+
+        if (dbItem.isDeleted === false && isLocallyDeleted) {
+          setLocalDeletedId(branchId || '', staticItem.id, false);
+        }
+
         const resolved: any = {
           ...staticItem,
           ...dbItem,
           isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
-          isDeleted: dbItem.isDeleted === true || isLocallyDeleted,
-          isPurged: dbItem.isPurged === true || isLocallyPurged
+          isDeleted,
+          isPurged
         };
         if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
           resolved.imageUrl = undefined;
@@ -191,11 +199,18 @@ export default function BranchManager() {
         if (!existingIds.has(item.id)) {
           const isLocallyDeleted = localDeleted.has(item.id);
           const isLocallyPurged = localPurged.has(item.id);
+          const isDeleted = item.isDeleted !== undefined ? Boolean(item.isDeleted) : isLocallyDeleted;
+          const isPurged = item.isPurged !== undefined ? Boolean(item.isPurged) : isLocallyPurged;
+
+          if (item.isDeleted === false && isLocallyDeleted) {
+            setLocalDeletedId(branchId || '', item.id, false);
+          }
+
           merged.push({
             ...item,
             isAvailable: item.isAvailable !== false,
-            isDeleted: item.isDeleted === true || isLocallyDeleted,
-            isPurged: item.isPurged === true || isLocallyPurged
+            isDeleted,
+            isPurged
           });
         }
       });
