@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight } from 'lucide-react';
 import { optimizeImageUrl } from '../lib/imageOptimization';
@@ -26,41 +26,18 @@ export default function CategoryTile({
   onClick,
   accentColor = 'amber'
 }: CategoryTileProps) {
+  const [isLoaded, setIsLoaded] = useState(false);
+
   const rawImg = category.imageUrl || category.image || DEFAULT_CATEGORY_BG;
   const optimizedImg = optimizeImageUrl(rawImg, 500, 75);
-
-  const [isLoaded, setIsLoaded] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    if (optimizedImg.startsWith('data:')) return true;
-    const testImg = new Image();
-    testImg.src = optimizedImg;
-    return testImg.complete;
-  });
-  const [currentSrc, setCurrentSrc] = useState(optimizedImg);
-
-  // If category background image changes, smoothly transition
-  useEffect(() => {
-    if (optimizedImg !== currentSrc) {
-      setCurrentSrc(optimizedImg);
-      if (optimizedImg.startsWith('data:')) {
-        setIsLoaded(true);
-        return;
-      }
-      const img = new Image();
-      img.src = optimizedImg;
-      if (img.complete) {
-        setIsLoaded(true);
-      } else {
-        img.onload = () => setIsLoaded(true);
-      }
-    }
-  }, [optimizedImg, currentSrc]);
 
   const isAmber = accentColor === 'amber';
   const hoverBorderClass = isAmber ? 'hover:border-amber-400' : 'hover:border-teal-400';
   const hoverTextClass = isAmber ? 'group-hover:text-amber-300' : 'group-hover:text-teal-300';
   const arrowBgClass = isAmber ? 'group-hover:bg-amber-500' : 'group-hover:bg-teal-500';
-  const topBarClass = isAmber ? 'via-amber-400' : 'via-teal-400';
+  const topBarClass = isAmber 
+    ? 'via-amber-400' 
+    : 'via-teal-400';
 
   return (
     <motion.button
@@ -68,29 +45,31 @@ export default function CategoryTile({
       animate={{ opacity: 1, y: 0 }}
       transition={{ 
         duration: 0.15, 
-        delay: Math.min(index * 0.02, 0.12),
+        delay: Math.min(index * 0.02, 0.15),
         ease: 'easeOut'
       }}
       onClick={onClick}
       className={`bg-neutral-900 rounded-2xl shadow-md border border-neutral-800/80 ${hoverBorderClass} p-4 sm:p-5 flex flex-col justify-end text-left transition-all duration-300 group aspect-[4/3] sm:aspect-square relative overflow-hidden hover:shadow-xl hover:scale-[1.02] cursor-pointer`}
     >
-      {/* Category culinary background image & dark luxury placeholder */}
+      {/* Category culinary background image & placeholder */}
       <div className="absolute inset-0 z-0 bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-950 overflow-hidden">
-        {/* Subtle placeholder shimmer until image loads */}
+        {/* Placeholder shimmer / subtle food pattern until loaded */}
         <div 
           className={`absolute inset-0 bg-neutral-800 transition-opacity duration-300 ${
-            isLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            isLoaded ? 'opacity-0 pointer-events-none' : 'opacity-100 animate-pulse'
           }`} 
         />
 
         <img 
-          src={currentSrc} 
+          src={optimizedImg} 
           alt={category.name} 
           loading="eager"
+          // @ts-ignore fetchpriority is valid in modern browsers
+          fetchpriority={index < 8 ? "high" : "auto"}
           decoding="async"
           onLoad={() => setIsLoaded(true)}
           className={`w-full h-full object-cover group-hover:scale-110 transition-all duration-500 ${
-            isLoaded ? 'opacity-65 group-hover:opacity-80 scale-100' : 'opacity-0 scale-105'
+            isLoaded ? 'opacity-60 group-hover:opacity-75 scale-100' : 'opacity-0 scale-105'
           }`} 
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-black/30 group-hover:from-black/90 group-hover:via-black/50 transition-colors" />

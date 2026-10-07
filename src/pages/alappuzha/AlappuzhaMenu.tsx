@@ -10,8 +10,7 @@ import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
-import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId, getResolvedMenuItems, getResolvedCategories, initBranchSync } from '../../lib/localMenuStore';
-import { syncService } from '../../lib/syncService';
+import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId } from '../../lib/localMenuStore';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -21,15 +20,13 @@ export default function AlappuzhaMenu() {
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
   const [menuLoading, setMenuLoading] = useState(true);
-  const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>(() => {
-    return getResolvedCategories('alappuzha', staticAlappuzhaCategories);
-  });
   const [alappuzhaMenu, setAlappuzhaMenu] = useState<any[]>(() => {
-    const cats = getResolvedCategories('alappuzha', staticAlappuzhaCategories);
-    return getResolvedMenuItems('alappuzha', staticAlappuzhaMenu, cats).active.filter(
-      (item: any) => item.isAvailable !== false
-    );
+    const all = normalizeMenuItems(staticAlappuzhaMenu, staticAlappuzhaCategories);
+    const localDeleted = getLocalDeletedIds('alappuzha');
+    const localPurged = getLocalPurgedIds('alappuzha');
+    return all.filter((item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
   });
+  const [alappuzhaCategories, setAlappuzhaCategories] = useState<any[]>(staticAlappuzhaCategories);
   const { banners } = useBanners('alappuzha');
   const [currentBanner, setCurrentBanner] = useState(0);
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
@@ -39,8 +36,8 @@ export default function AlappuzhaMenu() {
   const prevBanner = () => setCurrentBanner((prev) => (prev - 1 + banners.length) % banners.length);
 
   useEffect(() => {
-    // Immediately preload initial cached category images into browser cache
-    preloadCategoryImages(alappuzhaCategories);
+    // Immediately preload initial static category images into browser cache
+    preloadCategoryImages(staticAlappuzhaCategories);
 
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
     checkIsDesktop();
@@ -49,48 +46,39 @@ export default function AlappuzhaMenu() {
   }, []);
 
   useEffect(() => {
-    let latestCategories: any[] = getResolvedCategories('alappuzha', staticAlappuzhaCategories);
-    let latestDbItems: any[] = [];
-
-    const refreshLocal = () => {
-      const activeCats = getResolvedCategories('alappuzha', staticAlappuzhaCategories, latestDbItems);
-      latestCategories = activeCats.length > 0 ? activeCats : staticAlappuzhaCategories;
-      setAlappuzhaCategories(latestCategories);
-      preloadCategoryImages(latestCategories);
-      const resolved = getResolvedMenuItems('alappuzha', staticAlappuzhaMenu, latestCategories, latestDbItems);
-      setAlappuzhaMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
-      setMenuLoading(false);
-    };
-
-    // Central multi-device sync
-    initBranchSync('alappuzha', refreshLocal);
-    const unsubSync = syncService.subscribe((payload) => {
-      if (payload.branchSlug === 'alappuzha' || payload.branchSlug === 'all') {
-        initBranchSync('alappuzha', refreshLocal);
-      }
-    });
-
-    const handleCustomSyncEvent = (e: any) => {
-      if (e.detail?.branchSlug === 'alappuzha' || e.detail?.branchSlug === 'all') {
-        refreshLocal();
-      }
-    };
-    window.addEventListener('asado-sync-update', handleCustomSyncEvent);
+    let latestCategories: any[] = staticAlappuzhaCategories;
+    const initialDeleted = getLocalDeletedIds('alappuzha');
+    const initialPurged = getLocalPurgedIds('alappuzha');
+    let latestRawItems: any[] = staticAlappuzhaMenu.filter(
+      (item: any) => !initialDeleted.has(item.id) && !initialPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+    );
 
     const unsubCat = onSnapshot(
       query(collection(db, 'categories'), where('branchSlug', '==', 'alappuzha')),
       (snapshot) => {
         const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const activeCats = getResolvedCategories('alappuzha', staticAlappuzhaCategories, dbCats);
+        const dbCatMap = new Map(dbCats.map((cat: any) => [cat.id, cat]));
+        const merged = staticAlappuzhaCategories.map((staticCat: any) => {
+          const dbCat = dbCatMap.get(staticCat.id);
+          return dbCat ? { ...staticCat, ...dbCat } : staticCat;
+        });
+        const existingIds = new Set(staticAlappuzhaCategories.map(c => c.id));
+        dbCats.forEach((cat: any) => {
+          if (!existingIds.has(cat.id)) merged.push(cat);
+        });
+        const activeCats = merged.filter((cat: any) => cat.isDeleted !== true);
         latestCategories = activeCats.length > 0 ? activeCats : staticAlappuzhaCategories;
         setAlappuzhaCategories(latestCategories);
         preloadCategoryImages(latestCategories);
         
-        const resolved = getResolvedMenuItems('alappuzha', staticAlappuzhaMenu, latestCategories, latestDbItems);
-        setAlappuzhaMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
+        // Re-normalize current dishes with latest categories, ensuring deleted/purged items are filtered
+        const filteredItems = latestRawItems.filter(
+          (item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+        );
+        setAlappuzhaMenu(normalizeMenuItems(filteredItems, latestCategories));
       },
       (error) => {
-        console.warn('Firestore categories snapshot warning:', error);
+        handleFirestoreError(error, OperationType.LIST, 'categories');
       }
     );
 
@@ -98,9 +86,75 @@ export default function AlappuzhaMenu() {
       query(collection(db, 'menuItems'), where('branchSlug', '==', 'alappuzha')),
       (snapshot) => {
         const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        latestDbItems = dbItems;
-        const resolved = getResolvedMenuItems('alappuzha', staticAlappuzhaMenu, latestCategories, dbItems);
-        setAlappuzhaMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
+        const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
+
+        const localDeleted = getLocalDeletedIds('alappuzha');
+        const localPurged = getLocalPurgedIds('alappuzha');
+
+        // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
+        const merged = staticAlappuzhaMenu.map((staticItem: any) => {
+          const dbItem = dbItemMap.get(staticItem.id);
+          const isLocallyDeleted = localDeleted.has(staticItem.id);
+          const isLocallyPurged = localPurged.has(staticItem.id);
+
+          if (!dbItem) {
+            return { 
+              ...staticItem, 
+              isAvailable: staticItem.isAvailable !== false,
+              isDeleted: isLocallyDeleted,
+              isPurged: isLocallyPurged
+            };
+          }
+
+          const isDeleted = dbItem.isDeleted !== undefined ? Boolean(dbItem.isDeleted) : isLocallyDeleted;
+          const isPurged = dbItem.isPurged !== undefined ? Boolean(dbItem.isPurged) : isLocallyPurged;
+
+          if (dbItem.isDeleted === false && isLocallyDeleted) {
+            setLocalDeletedId('alappuzha', staticItem.id, false);
+          }
+
+          const resolved: any = {
+            ...staticItem,
+            ...dbItem,
+            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
+            isDeleted,
+            isPurged
+          };
+          if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
+            resolved.imageUrl = undefined;
+            resolved.image = undefined;
+          }
+          return resolved;
+        });
+
+        // Add any custom items created in Firestore that aren't in static list
+        const existingIds = new Set(staticAlappuzhaMenu.map((i: any) => i.id));
+        dbItems.forEach((item: any) => {
+          if (!existingIds.has(item.id)) {
+            const isLocallyDeleted = localDeleted.has(item.id);
+            const isLocallyPurged = localPurged.has(item.id);
+            const isDeleted = item.isDeleted !== undefined ? Boolean(item.isDeleted) : isLocallyDeleted;
+            const isPurged = item.isPurged !== undefined ? Boolean(item.isPurged) : isLocallyPurged;
+
+            if (item.isDeleted === false && isLocallyDeleted) {
+              setLocalDeletedId('alappuzha', item.id, false);
+            }
+
+            merged.push({
+              ...item,
+              isAvailable: item.isAvailable !== false,
+              isDeleted,
+              isPurged
+            });
+          }
+        });
+
+        // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
+        const activeItems = merged.filter(
+          (item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
+        );
+        latestRawItems = activeItems;
+        setAlappuzhaMenu(normalizeMenuItems(activeItems, latestCategories));
         setMenuLoading(false);
       },
       (error) => {
@@ -109,12 +163,7 @@ export default function AlappuzhaMenu() {
       }
     );
 
-    return () => { 
-      unsubMenu(); 
-      unsubCat(); 
-      unsubSync();
-      window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
-    };
+    return () => { unsubMenu(); unsubCat(); };
   }, []);
   
   const activeCategory = alappuzhaCategories.find(c => c.name === activeCategoryName) || alappuzhaCategories.find(c => c.id === activeCategoryName);

@@ -2,30 +2,16 @@ import React, { useMemo } from "react";
 import { useParams, Link } from 'react-router-dom';
 import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
 import { useState, useEffect, useRef } from 'react';
-import { Utensils, Tag, Store, Plus, Trash2, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List, Camera, Image as ImageIcon } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { compressImage } from '../../lib/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
 import { useBanners, Banner } from '../../hooks/useBanners';
 import { resolveItemCategory, normalizeMenuItems } from '../../lib/categoryUtils';
-import { 
-  getLocalDeletedIds, 
-  setLocalDeletedId, 
-  getLocalPurgedIds, 
-  setLocalPurgedId,
-  saveLocalMenuItemEdit,
-  saveLocalCustomItem,
-  removeLocalCustomItem,
-  saveLocalCategoryEdit,
-  saveLocalCustomCategory,
-  setLocalDeletedCategoryId,
-  getResolvedMenuItems,
-  getResolvedCategories,
-  initBranchSync
-} from '../../lib/localMenuStore';
-import { syncService } from '../../lib/syncService';
+import { getLocalDeletedIds, setLocalDeletedId, getLocalPurgedIds, setLocalPurgedId } from '../../lib/localMenuStore';
 
 export default function BranchManager() {
   const { branchId } = useParams();
@@ -52,7 +38,22 @@ export default function BranchManager() {
   const [menuViewMode, setMenuViewMode] = useState<'grouped' | 'table'>('grouped');
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [reorderSaving, setReorderSaving] = useState(false);
+  const [deletedItems, setDeletedItems] = useState<any[]>(() => {
+    const raw = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
+    const cats = branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
+    const localDeleted = getLocalDeletedIds(branchId || '');
+    const localPurged = getLocalPurgedIds(branchId || '');
+    const deleted = raw.filter((item: any) => localDeleted.has(item.id) && !localPurged.has(item.id));
+    return normalizeMenuItems(deleted, cats);
+  });
+  const [showTrashModal, setShowTrashModal] = useState(false);
 
+  // Gallery State
+  const [galleryImages, setGalleryImages] = useState<any[]>([]);
+  const [newImageUrl, setNewImageUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const rawBaseItems = useMemo(() => {
     return branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
   }, [branchId]);
@@ -62,29 +63,31 @@ export default function BranchManager() {
   }, [branchId]);
 
   const [categories, setCategories] = useState<any[]>(() => {
-    return getResolvedCategories(branchId || '', branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : []);
+    return branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
   });
 
   const [menuItems, setMenuItems] = useState<any[]>(() => {
-    const cats = getResolvedCategories(branchId || '', branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : []);
-    const items = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
-    return getResolvedMenuItems(branchId || '', items, cats).active;
+    const raw = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
+    const cats = branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : [];
+    const localDeleted = getLocalDeletedIds(branchId || '');
+    const localPurged = getLocalPurgedIds(branchId || '');
+    const active = raw.filter((item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id));
+    return normalizeMenuItems(active, cats);
   });
-
-  const [deletedItems, setDeletedItems] = useState<any[]>(() => {
-    const cats = getResolvedCategories(branchId || '', branchId === 'kollam' ? kollamCategories : branchId === 'alappuzha' ? alappuzhaCategories : []);
-    const items = branchId === 'kollam' ? kollamMenu : branchId === 'alappuzha' ? alappuzhaMenu : [];
-    return getResolvedMenuItems(branchId || '', items, cats).deleted;
-  });
-
-  const [showTrashModal, setShowTrashModal] = useState(false);
-
+  const menuFileInputRef = useRef<HTMLInputElement>(null);
+  const newMenuFileInputRef = useRef<HTMLInputElement>(null);
+  const editFileInputRef = useRef<HTMLInputElement>(null);
+  const targetMenuIdRef = useRef<string | null>(null);
+  const [targetMenuId, setTargetMenuId] = useState<string | null>(null);
+  const [uploadingMenuId, setUploadingMenuId] = useState<string | null>(null);
   const [newMenuName, setNewMenuName] = useState('');
   const [newMenuPrice, setNewMenuPrice] = useState('');
   const [newMenuCategory, setNewMenuCategory] = useState('');
   const [newMenuDescription, setNewMenuDescription] = useState('');
   const [newMenuIsVeg, setNewMenuIsVeg] = useState(false);
   const [newMenuIsChefRec, setNewMenuIsChefRec] = useState(false);
+  const [newMenuImage, setNewMenuImage] = useState('');
+  const [compressingNewMenuImage, setCompressingNewMenuImage] = useState(false);
   
   // Edit Menu Item Modal State
   const [editingItem, setEditingItem] = useState<{
@@ -96,117 +99,136 @@ export default function BranchManager() {
     isVeg: boolean;
     isChefRecommendation: boolean;
     isAvailable: boolean;
+    imageUrl?: string;
   } | null>(null);
+  const [compressingEditImage, setCompressingEditImage] = useState(false);
+
+  const DEFAULT_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryImage, setNewCategoryImage] = useState('');
+  const [compressingNewCatImage, setCompressingNewCatImage] = useState(false);
+  const newCatFileInputRef = useRef<HTMLInputElement>(null);
   const catFileInputRef = useRef<HTMLInputElement>(null);
+  const [targetCatId, setTargetCatId] = useState<string | null>(null);
   const [uploadingCatId, setUploadingCatId] = useState<string | null>(null);
-
-  const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = (event) => {
-        const img = new Image();
-        img.src = event.target?.result as string;
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const MAX_WIDTH = 800;
-          const MAX_HEIGHT = 800;
-          let width = img.width;
-          let height = img.height;
-
-          if (width > height) {
-            if (width > MAX_WIDTH) {
-              height *= MAX_WIDTH / width;
-              width = MAX_WIDTH;
-            }
-          } else {
-            if (height > MAX_HEIGHT) {
-              width *= MAX_HEIGHT / height;
-              height = MAX_HEIGHT;
-            }
-          }
-
-          canvas.width = width;
-          canvas.height = height;
-          const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.8));
-        };
-        img.onerror = reject;
-      };
-      reader.onerror = reject;
-    });
-  };
-
-  const handleCategoryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !uploadingCatId || !branchId) return;
-
-    try {
-      const compressed = await compressImage(file);
-      const updateData = {
-        id: uploadingCatId,
-        imageUrl: compressed,
-        image: compressed,
-        branchSlug: branchId,
-        updatedAt: Date.now()
-      };
-      saveLocalCategoryEdit(branchId, updateData);
-      setCategories(prev => prev.map(c => c.id === uploadingCatId ? { ...c, ...updateData } : c));
-      try {
-        await setDoc(doc(db, 'categories', uploadingCatId), updateData, { merge: true });
-      } catch (err) {
-        console.warn('Firestore category photo sync warning:', err);
-      }
-    } catch (err) {
-      console.error('Error compressing category photo:', err);
-    } finally {
-      setUploadingCatId(null);
-      if (catFileInputRef.current) catFileInputRef.current.value = '';
-    }
-  };
 
   // Edit Category Modal State
   const [editingCategory, setEditingCategory] = useState<{
     id: string;
     name: string;
+    imageUrl?: string;
   } | null>(null);
+  const [compressingEditCatImage, setCompressingEditCatImage] = useState(false);
+  const editCatFileInputRef = useRef<HTMLInputElement>(null);
+
+  const galleryCategories = useMemo(() => {
+    if (branchId === 'alappuzha') {
+      return ['Ambience', 'Houseboats', 'Celebration'];
+    }
+    return ['Ambience', 'Lake View', 'Boating', 'Decoration'];
+  }, [branchId]);
+
+  const [newImageCategory, setNewImageCategory] = useState(() => 
+    branchId === 'alappuzha' ? 'Ambience' : 'Ambience'
+  );
+
+  useEffect(() => {
+    if (galleryCategories.length > 0) {
+      setNewImageCategory(galleryCategories[0]);
+    }
+  }, [branchId, galleryCategories]);
 
   useEffect(() => {
     if (!branchId) return;
-
-    const refreshBranchData = () => {
-      const currentCats = getResolvedCategories(branchId, rawBaseCategories);
-      setCategories(currentCats);
-      const resolved = getResolvedMenuItems(branchId, rawBaseItems, currentCats);
-      setMenuItems(resolved.active);
-      setDeletedItems(resolved.deleted);
-    };
-
-    // Multi-device central sync
-    initBranchSync(branchId, refreshBranchData);
-    const unsubSync = syncService.subscribe((payload) => {
-      if (payload.branchSlug === branchId || payload.branchSlug === 'all') {
-        initBranchSync(branchId, refreshBranchData);
-      }
+    const q = query(collection(db, 'galleryImages'), where('branchSlug', '==', branchId));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const images = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setGalleryImages(images.sort((a: any, b: any) => b.createdAt - a.createdAt));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'galleryImages');
     });
-
-    const handleCustomSync = (e: any) => {
-      if (e.detail?.branchSlug === branchId || e.detail?.branchSlug === 'all') {
-        refreshBranchData();
-      }
-    };
-    window.addEventListener('asado-sync-update', handleCustomSync);
 
     const qMenu = query(collection(db, 'menuItems'), where('branchSlug', '==', branchId));
     const unsubMenu = onSnapshot(qMenu, (snapshot) => {
       const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       const currentCats = categories.length > 0 ? categories : rawBaseCategories;
-      const resolved = getResolvedMenuItems(branchId, rawBaseItems, currentCats, dbItems);
-      setMenuItems(resolved.active);
-      setDeletedItems(resolved.deleted);
+      const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
+      const localDeleted = getLocalDeletedIds(branchId || '');
+      const localPurged = getLocalPurgedIds(branchId || '');
+
+      // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
+      const merged = rawBaseItems.map((staticItem: any) => {
+        const dbItem = dbItemMap.get(staticItem.id);
+        const isLocallyDeleted = localDeleted.has(staticItem.id);
+        const isLocallyPurged = localPurged.has(staticItem.id);
+
+        if (!dbItem) {
+          return { 
+            ...staticItem, 
+            isAvailable: staticItem.isAvailable !== false,
+            isDeleted: isLocallyDeleted,
+            isPurged: isLocallyPurged
+          };
+        }
+
+        const isDeleted = dbItem.isDeleted !== undefined ? Boolean(dbItem.isDeleted) : isLocallyDeleted;
+        const isPurged = dbItem.isPurged !== undefined ? Boolean(dbItem.isPurged) : isLocallyPurged;
+
+        if (dbItem.isDeleted === false && isLocallyDeleted) {
+          setLocalDeletedId(branchId || '', staticItem.id, false);
+        }
+
+        const resolved: any = {
+          ...staticItem,
+          ...dbItem,
+          isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
+          isDeleted,
+          isPurged
+        };
+        if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
+          resolved.imageUrl = undefined;
+          resolved.image = undefined;
+        }
+        return resolved;
+      });
+
+      // Add custom items created in Firestore
+      const existingIds = new Set(rawBaseItems.map((i: any) => i.id));
+      dbItems.forEach((item: any) => {
+        if (!existingIds.has(item.id)) {
+          const isLocallyDeleted = localDeleted.has(item.id);
+          const isLocallyPurged = localPurged.has(item.id);
+          const isDeleted = item.isDeleted !== undefined ? Boolean(item.isDeleted) : isLocallyDeleted;
+          const isPurged = item.isPurged !== undefined ? Boolean(item.isPurged) : isLocallyPurged;
+
+          if (item.isDeleted === false && isLocallyDeleted) {
+            setLocalDeletedId(branchId || '', item.id, false);
+          }
+
+          merged.push({
+            ...item,
+            isAvailable: item.isAvailable !== false,
+            isDeleted,
+            isPurged
+          });
+        }
+      });
+
+      const activeList: any[] = [];
+      const deletedList: any[] = [];
+      merged.forEach((item: any) => {
+        if (item.isDeleted === true) {
+          if (!item.isPurged) {
+            deletedList.push(item);
+          }
+        } else {
+          activeList.push(item);
+        }
+      });
+
+      setMenuItems(normalizeMenuItems(activeList, currentCats));
+      setDeletedItems(normalizeMenuItems(deletedList, currentCats));
     }, (error) => {
       console.warn('Firestore menuItems snapshot warning:', error);
     });
@@ -214,18 +236,22 @@ export default function BranchManager() {
     const qCat = query(collection(db, 'categories'), where('branchSlug', '==', branchId));
     const unsubCat = onSnapshot(qCat, (snapshot) => {
       const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      const resolvedCats = getResolvedCategories(branchId, rawBaseCategories, dbCats);
-      setCategories(resolvedCats);
+      if (dbCats.length === 0) {
+        setCategories(rawBaseCategories.filter((c: any) => !c.isDeleted));
+      } else {
+        const dbCatMap = new Map(dbCats.map((c: any) => [c.id, c]));
+        const merged = rawBaseCategories.map((sc: any) => dbCatMap.get(sc.id) || sc);
+        const existingIds = new Set(rawBaseCategories.map((c: any) => c.id));
+        dbCats.forEach((c: any) => {
+          if (!existingIds.has(c.id)) merged.push(c);
+        });
+        setCategories(merged.filter((c: any) => c.isDeleted !== true));
+      }
     }, (error) => {
-      console.warn('Firestore categories snapshot warning:', error);
+      handleFirestoreError(error, OperationType.LIST, 'categories');
     });
   
-    return () => { 
-      unsubMenu(); 
-      unsubCat(); 
-      unsubSync();
-      window.removeEventListener('asado-sync-update', handleCustomSync);
-    };
+    return () => { unsubscribe(); unsubMenu(); unsubCat(); };
   }, [branchId, rawBaseItems, rawBaseCategories]);
 
   // Sync banner state for this branch
@@ -265,29 +291,25 @@ export default function BranchManager() {
       : { bgColor: 'bg-amber-50', textColor: 'text-amber-950', tagBg: 'bg-amber-200', tagColor: 'text-amber-900' };
 
     const id = targetBanner?.id || `banner-${branchId}`;
-    const bannerPayload = {
-      id,
-      title: bannerTitle.trim(),
-      subtitle: bannerSubtitle.trim(),
-      tagText: bannerTagText.trim(),
-      branchSlug: branchId,
-      isActive: bannerIsActive,
-      updatedAt: Date.now(),
-      ...themeConfig
-    };
 
     try {
-      if (targetBanner) {
-        await updateBanner(id, bannerPayload);
-      } else {
-        await addBanner(bannerPayload);
-      }
+      await setDoc(doc(db, 'banners', id), {
+        id,
+        title: bannerTitle.trim(),
+        subtitle: bannerSubtitle.trim(),
+        tagText: bannerTagText.trim(),
+        branchSlug: branchId,
+        isActive: bannerIsActive,
+        updatedAt: Date.now(),
+        ...themeConfig
+      }, { merge: true });
+
       setBannerSavedNotice(true);
       setTimeout(() => setBannerSavedNotice(false), 4000);
     } catch (err: any) {
-      console.warn("Deferred banner save:", err);
-      setBannerSavedNotice(true);
-      setTimeout(() => setBannerSavedNotice(false), 4000);
+      console.error("Failed to save banner:", err);
+      handleFirestoreError(err, OperationType.UPDATE, `banners/${id}`);
+      alert("Error saving banner: " + (err?.message || "Unknown error"));
     } finally {
       setIsSavingBanner(false);
     }
@@ -306,29 +328,24 @@ export default function BranchManager() {
       ? { bgColor: 'bg-neutral-900', textColor: 'text-white', tagBg: 'bg-amber-500', tagColor: 'text-neutral-950' }
       : { bgColor: 'bg-amber-50', textColor: 'text-amber-950', tagBg: 'bg-amber-200', tagColor: 'text-amber-900' };
 
-    const bannerPayload = {
-      id,
-      title: bannerTitle.trim() || (branch?.slug === 'kollam' ? "See Live FIFA 2026 Matches (Everyday)" : "Live Music Every Saturday"),
-      subtitle: bannerSubtitle.trim() || "Promotional specials and lakeside dining.",
-      tagText: bannerTagText.trim() || "Special Event",
-      branchSlug: branchId,
-      isActive: nextState,
-      updatedAt: Date.now(),
-      ...themeConfig
-    };
-
     try {
-      if (targetBanner || bannerIdToToggle) {
-        await updateBanner(id, bannerPayload);
-      } else {
-        await addBanner(bannerPayload);
-      }
+      await setDoc(doc(db, 'banners', id), {
+        id,
+        title: bannerTitle.trim() || (branch?.slug === 'kollam' ? "See Live FIFA 2026 Matches (Everyday)" : "Live Music Every Saturday"),
+        subtitle: bannerSubtitle.trim() || "Promotional specials and lakeside dining.",
+        tagText: bannerTagText.trim() || "Special Event",
+        branchSlug: branchId,
+        isActive: nextState,
+        updatedAt: Date.now(),
+        ...themeConfig
+      }, { merge: true });
+
       setBannerSavedNotice(true);
       setTimeout(() => setBannerSavedNotice(false), 4000);
     } catch (err: any) {
-      console.warn("Deferred banner toggle:", err);
-      setBannerSavedNotice(true);
-      setTimeout(() => setBannerSavedNotice(false), 4000);
+      console.error("Error toggling banner", err);
+      handleFirestoreError(err, OperationType.UPDATE, `banners/${id}`);
+      alert("Error updating banner: " + (err?.message || "Unknown error"));
     }
   };
 
@@ -469,10 +486,6 @@ export default function BranchManager() {
       return m;
     }));
 
-    swapped.forEach((item, index) => {
-      saveLocalMenuItemEdit(branchId || '', { id: item.id, order: index, category: catName });
-    });
-
     try {
       const batch = writeBatch(db);
       swapped.forEach((item, index) => {
@@ -485,12 +498,14 @@ export default function BranchManager() {
           branchSlug: branchId,
           isVeg: Boolean(item.isVeg),
           isChefRecommendation: Boolean(item.isChefRecommendation),
-          description: item.description || ''
+          description: item.description || '',
+          imageUrl: item.imageUrl || null
         }, { merge: true });
       });
       await batch.commit();
     } catch (err) {
-      console.warn("Deferred batch commit for item reorder", err);
+      console.error("Failed to commit item reorder", err);
+      handleFirestoreError(err, OperationType.UPDATE, 'menuItems');
     } finally {
       setReorderSaving(false);
     }
@@ -501,94 +516,188 @@ export default function BranchManager() {
   const tabs = [
     { id: 'menu', name: 'Menu Items', icon: Utensils },
     { id: 'categories', name: 'Categories', icon: Tag },
-    { id: 'offers', name: 'Offers Banner', icon: Sparkles },
+    { id: 'offers', name: 'Offers Banner', icon: Tag },
+    { id: 'gallery', name: 'Gallery', icon: Image },
   ];
+
+  const handleAddImage = async () => {
+    if (!newImageUrl) return;
+    const id = Date.now().toString();
+    const newImg = {
+      url: newImageUrl,
+      category: newImageCategory,
+      branchSlug: branchId,
+      createdAt: Date.now()
+    };
+    try {
+      await setDoc(doc(db, 'galleryImages', id), newImg);
+      setNewImageUrl('');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `galleryImages/${id}`);
+    }
+  };
+
+  const handleRemoveImage = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'galleryImages', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `galleryImages/${id}`);
+    }
+  };
+
+  const triggerMenuUpload = (menuId: string) => {
+    targetMenuIdRef.current = menuId;
+    setTargetMenuId(menuId);
+    if (menuFileInputRef.current) {
+      menuFileInputRef.current.value = '';
+      menuFileInputRef.current.click();
+    }
+  };
+
+  const handleMenuImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const menuId = targetMenuIdRef.current || targetMenuId;
+    if (!file || !branchId || !menuId) {
+      console.warn("Upload aborted: missing file, branchId, or menuId", { file: !!file, branchId, menuId });
+      return;
+    }
+
+    setUploadingMenuId(menuId);
+    try {
+      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.72 });
+      
+      const updateData: any = {
+        id: menuId,
+        imageUrl: compressedDataUrl,
+        image: compressedDataUrl,
+        branchSlug: branchId,
+        updatedAt: Date.now()
+      };
+
+      await setDoc(doc(db, 'menuItems', menuId), updateData, { merge: true });
+
+      // Immediately update local state so UI updates instantly
+      setMenuItems(prev => prev.map(m => m.id === menuId ? { ...m, imageUrl: compressedDataUrl, image: compressedDataUrl } : m));
+    } catch (error) {
+      console.error("Menu image upload error:", error);
+      alert("Image upload failed: " + (error as Error).message);
+    } finally {
+      setUploadingMenuId(null);
+      setTargetMenuId(null);
+      targetMenuIdRef.current = null;
+      if (menuFileInputRef.current) menuFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveMenuImage = async (menuId: string) => {
+    try {
+      await setDoc(doc(db, 'menuItems', menuId), {
+        imageUrl: null,
+        image: null,
+        branchSlug: branchId,
+        updatedAt: Date.now()
+      }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === menuId ? { ...m, imageUrl: undefined, image: undefined } : m));
+    } catch (error) {
+      console.error("Failed to remove dish photo:", error);
+    }
+  };
+
+  const handleNewMenuImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCompressingNewMenuImage(true);
+    try {
+      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.72 });
+      setNewMenuImage(compressedDataUrl);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to process image: " + (error as Error).message);
+    } finally {
+      setCompressingNewMenuImage(false);
+      if (newMenuFileInputRef.current) newMenuFileInputRef.current.value = '';
+    }
+  };
 
   const handleAddMenu = async () => {
     if (!newMenuName.trim() || !newMenuPrice.trim() || !newMenuCategory.trim()) {
       return;
     }
-    const id = 'custom_' + Date.now();
-    const newPriceNum = parseFloat(newMenuPrice.trim()) || newMenuPrice.trim();
-    const catCount = menuItems.filter(m => m.category === newMenuCategory).length;
-    const newItemData: any = {
-      id,
-      name: newMenuName.trim(),
-      price: newPriceNum,
-      category: newMenuCategory.trim(),
-      description: newMenuDescription.trim(),
-      isVeg: newMenuIsVeg,
-      isChefRecommendation: newMenuIsChefRec,
-      isAvailable: true,
-      isDeleted: false,
-      order: catCount,
-      status: 'active',
-      branchSlug: branchId,
-      createdAt: Date.now(),
-      updatedAt: Date.now()
-    };
-    saveLocalCustomItem(branchId || '', newItemData);
-    setMenuItems(prev => [...prev, newItemData]);
-    setNewMenuName('');
-    setNewMenuPrice('');
-    setNewMenuDescription('');
-    setNewMenuIsVeg(false);
-    setNewMenuIsChefRec(false);
+    const id = Date.now().toString();
     try {
+      const catCount = menuItems.filter(m => m.category === newMenuCategory).length;
+      const newItemData: any = {
+        id,
+        name: newMenuName.trim(),
+        price: newMenuPrice.trim(),
+        category: newMenuCategory.trim(),
+        description: newMenuDescription.trim(),
+        isVeg: newMenuIsVeg,
+        isChefRecommendation: newMenuIsChefRec,
+        isAvailable: true,
+        isDeleted: false,
+        imageUrl: newMenuImage.trim() || null,
+        image: newMenuImage.trim() || null,
+        order: catCount,
+        status: 'active',
+        branchSlug: branchId,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
       await setDoc(doc(db, 'menuItems', id), newItemData);
+      setMenuItems(prev => [...prev, newItemData]);
+      setNewMenuName('');
+      setNewMenuPrice('');
+      setNewMenuDescription('');
+      setNewMenuIsVeg(false);
+      setNewMenuIsChefRec(false);
+      setNewMenuImage('');
     } catch (e) {
-      console.warn('Firestore deferred sync:', e);
+      handleFirestoreError(e, OperationType.CREATE, 'menuItems');
     }
   };
 
   const toggleItemAvailability = async (item: any) => {
     const currentStatus = item.isAvailable !== false;
     const nextStatus = !currentStatus;
-    saveLocalMenuItemEdit(branchId || '', { id: item.id, isAvailable: nextStatus });
-    setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isAvailable: nextStatus } : m));
     try {
       await setDoc(doc(db, 'menuItems', item.id), {
         isAvailable: nextStatus,
         branchSlug: branchId,
         updatedAt: Date.now()
       }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isAvailable: nextStatus } : m));
     } catch (e) {
-      console.warn('Firestore deferred sync:', e);
+      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
     }
   };
 
   const toggleItemVeg = async (item: any) => {
-    const nextVeg = !item.isVeg;
-    saveLocalMenuItemEdit(branchId || '', { id: item.id, isVeg: nextVeg });
-    setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isVeg: nextVeg } : m));
     try {
-      await setDoc(doc(db, 'menuItems', item.id), { isVeg: nextVeg, branchSlug: branchId, updatedAt: Date.now() }, { merge: true });
+      await setDoc(doc(db, 'menuItems', item.id), { isVeg: !item.isVeg, branchSlug: branchId }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isVeg: !item.isVeg } : m));
     } catch (e) {
-      console.warn('Firestore deferred sync:', e);
+      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
     }
   };
 
   const toggleItemChefRec = async (item: any) => {
-    const nextChefRec = !item.isChefRecommendation;
-    saveLocalMenuItemEdit(branchId || '', { id: item.id, isChefRecommendation: nextChefRec });
-    setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isChefRecommendation: nextChefRec } : m));
     try {
-      await setDoc(doc(db, 'menuItems', item.id), { isChefRecommendation: nextChefRec, branchSlug: branchId, updatedAt: Date.now() }, { merge: true });
+      await setDoc(doc(db, 'menuItems', item.id), { isChefRecommendation: !item.isChefRecommendation, branchSlug: branchId }, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, isChefRecommendation: !item.isChefRecommendation } : m));
     } catch (e) {
-      console.warn('Firestore deferred sync:', e);
+      handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
     }
   };
 
   const handleEditDescription = async (item: any) => {
     const newDesc = prompt(`Edit description for "${item.name}":`, item.description || "");
     if (newDesc !== null) {
-      const descVal = newDesc.trim();
-      saveLocalMenuItemEdit(branchId || '', { id: item.id, description: descVal });
-      setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, description: descVal } : m));
       try {
-        await setDoc(doc(db, 'menuItems', item.id), { description: descVal, branchSlug: branchId, updatedAt: Date.now() }, { merge: true });
+        await setDoc(doc(db, 'menuItems', item.id), { description: newDesc.trim(), branchSlug: branchId }, { merge: true });
+        setMenuItems(prev => prev.map(m => m.id === item.id ? { ...m, description: newDesc.trim() } : m));
       } catch (e) {
-        console.warn('Firestore deferred sync:', e);
+        handleFirestoreError(e, OperationType.UPDATE, `menuItems/${item.id}`);
       }
     }
   };
@@ -602,8 +711,25 @@ export default function BranchManager() {
       description: item.description || '',
       isVeg: Boolean(item.isVeg),
       isChefRecommendation: Boolean(item.isChefRecommendation),
-      isAvailable: item.isAvailable !== false
+      isAvailable: item.isAvailable !== false,
+      imageUrl: item.imageUrl || item.image || ''
     });
+  };
+
+  const handleEditImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingItem) return;
+    setCompressingEditImage(true);
+    try {
+      const compressedBase64 = await compressImage(file, { maxWidth: 800, quality: 0.7 });
+      setEditingItem(prev => prev ? { ...prev, imageUrl: compressedBase64 } : null);
+    } catch (err) {
+      console.error("Failed to compress edit image", err);
+      alert("Could not process image. Please try another image.");
+    } finally {
+      setCompressingEditImage(false);
+      if (editFileInputRef.current) editFileInputRef.current.value = '';
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -612,37 +738,39 @@ export default function BranchManager() {
       alert("Item name cannot be empty.");
       return;
     }
-    const updatedData: any = {
-      id: editingItem.id,
-      name: editingItem.name.trim(),
-      price: editingItem.price.trim(),
-      category: editingItem.category.trim(),
-      description: editingItem.description.trim(),
-      isVeg: Boolean(editingItem.isVeg),
-      isChefRecommendation: Boolean(editingItem.isChefRecommendation),
-      isAvailable: editingItem.isAvailable !== false,
-      branchSlug: branchId,
-      status: 'active',
-      updatedAt: Date.now()
-    };
-    saveLocalMenuItemEdit(branchId || '', updatedData);
-    setMenuItems(prev => prev.map(m => m.id === editingItem.id ? { ...m, ...updatedData } : m));
-    setEditingItem(null);
     try {
+      const finalPhoto = editingItem.imageUrl?.trim() || null;
+      const updatedData: any = {
+        id: editingItem.id,
+        name: editingItem.name.trim(),
+        price: editingItem.price.trim(),
+        category: editingItem.category.trim(),
+        description: editingItem.description.trim(),
+        isVeg: Boolean(editingItem.isVeg),
+        isChefRecommendation: Boolean(editingItem.isChefRecommendation),
+        isAvailable: editingItem.isAvailable !== false,
+        imageUrl: finalPhoto,
+        image: finalPhoto,
+        branchSlug: branchId,
+        status: 'active',
+        updatedAt: Date.now()
+      };
       await setDoc(doc(db, 'menuItems', editingItem.id), updatedData, { merge: true });
+      setMenuItems(prev => prev.map(m => m.id === editingItem.id ? { ...m, ...updatedData } : m));
+      setEditingItem(null);
     } catch (error) {
-      console.warn('Firestore deferred sync:', error);
+      handleFirestoreError(error, OperationType.UPDATE, `menuItems/${editingItem.id}`);
     }
   };
 
   const handleRemoveMenu = async (id: string) => {
-    setLocalDeletedId(branchId || '', id, true);
-    const itemToDelete = menuItems.find(m => m.id === id);
-    setMenuItems(prev => prev.filter(m => m.id !== id));
-    if (itemToDelete) {
-      setDeletedItems(prev => [{ ...itemToDelete, isDeleted: true, deletedAt: Date.now() }, ...prev.filter(d => d.id !== id)]);
-    }
     try {
+      setLocalDeletedId(branchId || '', id, true);
+      const itemToDelete = menuItems.find(m => m.id === id);
+      setMenuItems(prev => prev.filter(m => m.id !== id));
+      if (itemToDelete) {
+        setDeletedItems(prev => [{ ...itemToDelete, isDeleted: true, deletedAt: Date.now() }, ...prev.filter(d => d.id !== id)]);
+      }
       await setDoc(doc(db, 'menuItems', id), {
         id,
         isDeleted: true,
@@ -655,13 +783,13 @@ export default function BranchManager() {
   };
 
   const handleRestoreMenu = async (id: string) => {
-    setLocalDeletedId(branchId || '', id, false);
-    const itemToRestore = deletedItems.find(d => d.id === id);
-    setDeletedItems(prev => prev.filter(d => d.id !== id));
-    if (itemToRestore) {
-      setMenuItems(prev => [...prev, { ...itemToRestore, isDeleted: false, isPurged: false }]);
-    }
     try {
+      setLocalDeletedId(branchId || '', id, false);
+      const itemToRestore = deletedItems.find(d => d.id === id);
+      setDeletedItems(prev => prev.filter(d => d.id !== id));
+      if (itemToRestore) {
+        setMenuItems(prev => [...prev, { ...itemToRestore, isDeleted: false, isPurged: false }]);
+      }
       await setDoc(doc(db, 'menuItems', id), {
         id,
         isDeleted: false,
@@ -677,11 +805,11 @@ export default function BranchManager() {
   };
 
   const handlePermanentDeleteMenu = async (id: string) => {
-    setLocalPurgedId(branchId || '', id);
-    setLocalDeletedId(branchId || '', id, true);
-    setDeletedItems(prev => prev.filter(d => d.id !== id));
-    const isBaseItem = rawBaseItems.some((i: any) => i.id === id);
     try {
+      setLocalPurgedId(branchId || '', id);
+      setLocalDeletedId(branchId || '', id, true);
+      setDeletedItems(prev => prev.filter(d => d.id !== id));
+      const isBaseItem = rawBaseItems.some((i: any) => i.id === id);
       if (isBaseItem) {
         await setDoc(doc(db, 'menuItems', id), {
           id,
@@ -698,6 +826,22 @@ export default function BranchManager() {
     }
   };
 
+  const handleNewCatImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCompressingNewCatImage(true);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      setNewCategoryImage(compressed);
+    } catch (err) {
+      console.error("Failed to compress category image", err);
+      alert("Could not process image.");
+    } finally {
+      setCompressingNewCatImage(false);
+      if (newCatFileInputRef.current) newCatFileInputRef.current.value = '';
+    }
+  };
+
   const handleAddCategory = async () => {
     if (!newCategoryName.trim() || !branchId) return;
     const id = `cat_${Date.now()}`;
@@ -705,46 +849,112 @@ export default function BranchManager() {
       id,
       name: newCategoryName.trim(),
       branchSlug: branchId,
+      image: newCategoryImage || null,
+      imageUrl: newCategoryImage || null,
       createdAt: Date.now()
     };
-    saveLocalCustomCategory(branchId, catData);
-    setCategories(prev => [...prev, catData]);
-    setNewCategoryName('');
     try {
       await setDoc(doc(db, 'categories', id), catData);
+      setCategories(prev => [...prev, catData]);
+      setNewCategoryName('');
+      setNewCategoryImage('');
     } catch (e) {
-      console.warn('Firestore deferred sync:', e);
+      handleFirestoreError(e, OperationType.CREATE, 'categories');
+    }
+  };
+
+  const triggerCategoryPhotoUpload = (catId: string) => {
+    setTargetCatId(catId);
+    setTimeout(() => {
+      catFileInputRef.current?.click();
+    }, 50);
+  };
+
+  const handleCategoryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !targetCatId || !branchId) return;
+    const catToUpdate = categories.find(c => c.id === targetCatId);
+    if (!catToUpdate) return;
+
+    setUploadingCatId(targetCatId);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      const updateData = {
+        name: catToUpdate.name,
+        branchSlug: branchId,
+        image: compressed,
+        imageUrl: compressed,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'categories', targetCatId), updateData, { merge: true });
+      setCategories(prev => prev.map(c => c.id === targetCatId ? { ...c, ...updateData } : c));
+    } catch (err) {
+      console.error("Failed to process category photo", err);
+      alert("Could not upload category photo.");
+    } finally {
+      setUploadingCatId(null);
+      setTargetCatId(null);
+      if (catFileInputRef.current) catFileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveCategoryPhoto = async (cat: any) => {
+    try {
+      const updateData = {
+        image: null,
+        imageUrl: null,
+        updatedAt: Date.now()
+      };
+      await setDoc(doc(db, 'categories', cat.id), updateData, { merge: true });
+      setCategories(prev => prev.map(c => c.id === cat.id ? { ...c, image: undefined, imageUrl: undefined } : c));
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `categories/${cat.id}`);
     }
   };
 
   const handleStartEditCategory = (cat: any) => {
     setEditingCategory({
       id: cat.id,
-      name: cat.name
+      name: cat.name,
+      imageUrl: cat.imageUrl || cat.image || ''
     });
+  };
+
+  const handleEditCatImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingCategory) return;
+    setCompressingEditCatImage(true);
+    try {
+      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      setEditingCategory(prev => prev ? { ...prev, imageUrl: compressed } : null);
+    } catch (err) {
+      console.error("Failed to compress edit category image", err);
+      alert("Could not process image.");
+    } finally {
+      setCompressingEditCatImage(false);
+      if (editCatFileInputRef.current) editCatFileInputRef.current.value = '';
+    }
   };
 
   const handleSaveEditCategory = async () => {
     if (!editingCategory || !editingCategory.name.trim() || !branchId) return;
-    const updateData = {
-      id: editingCategory.id,
-      name: editingCategory.name.trim(),
-      branchSlug: branchId,
-      updatedAt: Date.now()
-    };
-    saveLocalCategoryEdit(branchId, updateData);
-    setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, ...updateData } : c));
-    setEditingCategory(null);
     try {
+      const updateData = {
+        name: editingCategory.name.trim(),
+        branchSlug: branchId,
+        image: editingCategory.imageUrl || null,
+        imageUrl: editingCategory.imageUrl || null,
+        updatedAt: Date.now()
+      };
       await setDoc(doc(db, 'categories', editingCategory.id), updateData, { merge: true });
+      setCategories(prev => prev.map(c => c.id === editingCategory.id ? { ...c, ...updateData } : c));
+      setEditingCategory(null);
     } catch (e) {
-      console.warn('Firestore deferred sync:', e);
+      handleFirestoreError(e, OperationType.UPDATE, `categories/${editingCategory.id}`);
     }
   };
 
   const handleRemoveCategory = async (id: string) => {
-    setLocalDeletedCategoryId(branchId || '', id, true);
-    setCategories(prev => prev.filter(c => c.id !== id));
     try {
       const isBaseCat = rawBaseCategories.some((c: any) => c.id === id);
       if (isBaseCat) {
@@ -757,12 +967,45 @@ export default function BranchManager() {
       } else {
         await deleteDoc(doc(db, 'categories', id));
       }
+      setCategories(prev => prev.filter(c => c.id !== id));
     } catch (e) {
-      console.warn('Firestore deferred sync:', e);
+      handleFirestoreError(e, OperationType.DELETE, `categories/${id}`);
     }
   };
 
-  return (
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !branchId) return;
+    setUploading(true);
+    try {
+      if (file.type.startsWith('video/')) {
+        alert("Video files cannot be stored directly in free database documents due to size constraints. You can paste any direct video URL (e.g. from YouTube, Supabase Storage, or Cloudinary) into the URL box!");
+        return;
+      }
+
+      // In-browser compression: scale & compress image client-side to ~60-100KB WebP
+      const compressedDataUrl = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.78 });
+
+      // Immediately add to gallery in Firestore - 100% free on Spark plan!
+      const id = Date.now().toString();
+      const newImg = {
+        url: compressedDataUrl,
+        category: newImageCategory,
+        branchSlug: branchId,
+        createdAt: Date.now()
+      };
+      await setDoc(doc(db, 'galleryImages', id), newImg);
+      setNewImageUrl('');
+    } catch (error: any) {
+      console.error("Error uploading file:", error);
+      alert("Failed to process image: " + (error?.message || "Unknown error"));
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+    return (
     <div className="w-full">
       {/* Branch Header & Live Link */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1237,7 +1480,7 @@ export default function BranchManager() {
               <div className="bg-neutral-50 p-5 rounded-xl border border-neutral-200 mb-8 space-y-4">
                 <div className="flex flex-wrap gap-4 items-end">
                   <div className="flex-1 min-w-[200px]">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Item Name *</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Item Name</label>
                     <input 
                       type="text" 
                       value={newMenuName} 
@@ -1246,8 +1489,8 @@ export default function BranchManager() {
                       className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
                     />
                   </div>
-                  <div className="w-36">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Price (₹) *</label>
+                  <div className="w-28">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Price</label>
                     <input 
                       type="text" 
                       value={newMenuPrice} 
@@ -1256,16 +1499,47 @@ export default function BranchManager() {
                       className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
                     />
                   </div>
-                  <div className="w-56">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Category *</label>
+                  <div className="w-44">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Category</label>
                     <select 
                       value={newMenuCategory} 
                       onChange={e => setNewMenuCategory(e.target.value)} 
                       className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 outline-none focus:ring-2 focus:ring-amber-500"
                     >
-                      <option value="">Select category...</option>
+                      <option value="">Select...</option>
                       {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                     </select>
+                  </div>
+                  <div className="w-64">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-2">Photo (Optional)</label>
+                    <input type="file" accept="image/*" ref={newMenuFileInputRef} onChange={handleNewMenuImageSelect} className="hidden" />
+                    {newMenuImage ? (
+                      <div className="flex items-center gap-2 h-[38px] px-2 bg-white border border-neutral-300 rounded-lg">
+                        <img src={newMenuImage} alt="preview" className="w-6 h-6 rounded object-cover border border-neutral-200" />
+                        <span className="text-xs text-green-700 font-medium truncate flex-1">Ready</span>
+                        <button type="button" onClick={() => setNewMenuImage('')} className="text-xs text-red-500 hover:text-red-700 font-bold px-1" title="Remove photo">✕</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          type="button" 
+                          onClick={() => newMenuFileInputRef.current?.click()} 
+                          disabled={compressingNewMenuImage}
+                          className="h-[38px] px-3 bg-white border border-neutral-300 rounded-lg text-xs font-medium text-neutral-700 hover:bg-neutral-50 flex items-center justify-center gap-1.5 transition-colors shrink-0"
+                          title="Upload image from computer / mobile"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-amber-600" />
+                          <span>{compressingNewMenuImage ? 'Compressing...' : 'Upload'}</span>
+                        </button>
+                        <input
+                          type="url"
+                          placeholder="or paste URL"
+                          value={newMenuImage}
+                          onChange={e => setNewMenuImage(e.target.value)}
+                          className="flex-1 min-w-0 h-[38px] px-2.5 bg-white border border-neutral-300 rounded-lg text-xs text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1324,6 +1598,8 @@ export default function BranchManager() {
                 <span>💡 Dishes are arranged in a <strong>category-wise list</strong>. Use the <strong>▲</strong> and <strong>▼</strong> buttons to adjust the sequence of dishes within each category.</span>
               </div>
 
+              <input type="file" accept="image/*" ref={menuFileInputRef} onChange={handleMenuImageUpload} className="hidden" />
+
               {/* Category-Wise List / Master Table of Menu Items */}
               {menuViewMode === 'table' ? (
                 /* Master Table Mode (All Dishes) */
@@ -1356,6 +1632,7 @@ export default function BranchManager() {
                             <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
                             <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
                             <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-32">Status / Stock</th>
+                            <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
                             <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
                           </tr>
                         </thead>
@@ -1446,6 +1723,42 @@ export default function BranchManager() {
                                     </span>
                                     <span>{isAvailable ? 'In Stock' : 'Out of Stock'}</span>
                                   </button>
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  {(() => {
+                                    const itemPhoto = item.imageUrl || item.image;
+                                    const isUploading = uploadingMenuId === item.id;
+                                    return itemPhoto ? (
+                                      <div className="flex items-center justify-center gap-2">
+                                        <img src={itemPhoto} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-xs border border-neutral-200" />
+                                        <div className="flex flex-col items-start">
+                                          <button 
+                                            onClick={() => triggerMenuUpload(item.id)} 
+                                            disabled={isUploading}
+                                            className="text-xs text-amber-600 hover:text-amber-800 font-medium underline disabled:opacity-50"
+                                          >
+                                            {isUploading ? 'Saving...' : 'Change'}
+                                          </button>
+                                          <button
+                                            onClick={() => handleRemoveMenuImage(item.id)}
+                                            className="text-[10px] text-red-500 hover:text-red-700 font-medium"
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <button 
+                                        onClick={() => triggerMenuUpload(item.id)} 
+                                        disabled={isUploading} 
+                                        className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-700 hover:text-amber-700 border border-neutral-300 hover:border-amber-400 bg-white hover:bg-amber-50/50 rounded-lg px-2.5 py-1.5 transition-colors shadow-2xs disabled:opacity-50"
+                                        title="Upload photo for this dish"
+                                      >
+                                        <Upload className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>{isUploading ? 'Compressing...' : 'Upload'}</span>
+                                      </button>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="px-4 py-3 text-right whitespace-nowrap">
                                   <div className="flex items-center justify-end gap-2">
@@ -1549,6 +1862,7 @@ export default function BranchManager() {
                                     <th className="px-4 py-2.5 font-semibold text-neutral-600 w-28">Type</th>
                                     <th className="px-4 py-2.5 font-semibold text-neutral-600 w-24">Price</th>
                                     <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-32">Status / Stock</th>
+                                    <th className="px-4 py-2.5 text-center font-semibold text-neutral-600 w-28">Photo</th>
                                     <th className="px-4 py-2.5 text-right font-semibold text-neutral-600 w-36">Actions</th>
                                   </tr>
                                 </thead>
@@ -1653,6 +1967,42 @@ export default function BranchManager() {
                                             <span>{isAvailable ? 'In Stock' : 'Out of Stock'}</span>
                                           </button>
                                         </td>
+                                        <td className="px-4 py-3 text-center">
+                                          {(() => {
+                                            const itemPhoto = item.imageUrl || item.image;
+                                            const isUploading = uploadingMenuId === item.id;
+                                            return itemPhoto ? (
+                                              <div className="flex items-center justify-center gap-2">
+                                                <img src={itemPhoto} alt={item.name} className="w-10 h-10 object-cover rounded-lg shadow-xs border border-neutral-200" />
+                                                <div className="flex flex-col items-start">
+                                                  <button 
+                                                    onClick={() => triggerMenuUpload(item.id)} 
+                                                    disabled={isUploading}
+                                                    className="text-xs text-amber-600 hover:text-amber-800 font-medium underline disabled:opacity-50"
+                                                  >
+                                                    {isUploading ? 'Saving...' : 'Change'}
+                                                  </button>
+                                                  <button
+                                                    onClick={() => handleRemoveMenuImage(item.id)}
+                                                    className="text-[10px] text-red-500 hover:text-red-700 font-medium"
+                                                  >
+                                                    Remove
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <button 
+                                                onClick={() => triggerMenuUpload(item.id)} 
+                                                disabled={isUploading} 
+                                                className="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-700 hover:text-amber-700 border border-neutral-300 hover:border-amber-400 bg-white hover:bg-amber-50/50 rounded-lg px-2.5 py-1.5 transition-colors shadow-2xs disabled:opacity-50"
+                                                title="Upload photo for this dish"
+                                              >
+                                                <Upload className="w-3.5 h-3.5 text-amber-600" />
+                                                <span>{isUploading ? 'Compressing...' : 'Upload'}</span>
+                                              </button>
+                                            );
+                                          })()}
+                                        </td>
                                         <td className="px-4 py-3 text-right whitespace-nowrap">
                                           <div className="flex items-center justify-end gap-2">
                                             <button 
@@ -1713,49 +2063,97 @@ export default function BranchManager() {
             </div>
           )}
 
+          {activeTab === 'gallery' && (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold">Gallery Management</h2>
+              </div>
+              <p className="text-neutral-500 mb-6">Organize and upload images to the {branch.name} gallery.</p>
+
+              <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-200 mb-8 flex gap-4 items-end">
+                <div className="flex-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Image/Video URL or File</label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      value={newImageUrl}
+                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      placeholder="https://images.unsplash.com/..."
+                      className="flex-1 px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 placeholder:text-neutral-400 focus:ring-2 focus:ring-amber-500 outline-none"
+                    />
+                    <input 
+                      type="file" 
+                      accept="image/*,video/*" 
+                      ref={fileInputRef} 
+                      onChange={handleFileUpload} 
+                      className="hidden" 
+                    />
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="bg-white border border-neutral-300 text-neutral-700 px-4 py-2 rounded-lg font-medium hover:bg-neutral-50 transition-colors text-sm"
+                    >
+                      {uploading ? 'Uploading...' : 'Upload'}
+                    </button>
+                  </div>
+                </div>
+                <div className="w-48">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 mb-2">Category</label>
+                  <select 
+                    value={newImageCategory}
+                    onChange={(e) => setNewImageCategory(e.target.value)}
+                    className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-sm text-neutral-900 focus:ring-2 focus:ring-amber-500 outline-none"
+                  >
+                    {galleryCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                <button 
+                  onClick={handleAddImage}
+                  className="bg-neutral-900 text-white px-6 py-2 rounded-lg font-medium hover:bg-black transition-colors flex items-center gap-2 text-sm h-[38px]"
+                >
+                  <Plus className="w-4 h-4" /> Add
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {galleryImages.map((img) => (
+                  <div key={img.id} className="group relative rounded-xl overflow-hidden border border-neutral-200 aspect-square">
+                    {img.url.toLowerCase().includes('.mp4') ? (
+                      <video src={img.url} className="w-full h-full object-cover" controls muted playsInline />
+                    ) : (
+                      <img src={img.url} alt="" className="w-full h-full object-cover" />
+                    )}
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-4">
+                      <div className="self-end">
+                        <button 
+                          onClick={() => handleRemoveImage(img.id)}
+                          className="bg-white/20 hover:bg-red-500 text-white p-2 rounded-full backdrop-blur-sm transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <span className="bg-white text-neutral-900 text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full self-start">
+                        {img.category}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {activeTab === 'categories' && (
             <div>
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h2 className="text-xl font-bold text-neutral-900">Categories Management</h2>
-                  <p className="text-neutral-500 text-sm">Add, edit, and organize menu categories for this branch.</p>
+                  <h2 className="text-xl font-bold">Categories & Background Photos</h2>
+                  <p className="text-neutral-500 text-sm">Add or edit categories and assign custom background pictures to category cards on the menu.</p>
                 </div>
               </div>
 
-              {/* Add New Category Box */}
-              <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-200 mb-8 space-y-4">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">Add New Category</h3>
-                
-                <div className="flex flex-col sm:flex-row gap-3 items-center">
-                  <div className="flex-1 w-full">
-                    <label className="block text-xs font-semibold text-neutral-600 mb-1.5">Category Name *</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Seafood Starters, Signature Platters..." 
-                      value={newCategoryName} 
-                      onChange={e => setNewCategoryName(e.target.value)} 
-                      onKeyDown={e => {
-                        if (e.key === 'Enter' && newCategoryName.trim()) {
-                          handleAddCategory();
-                        }
-                      }}
-                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
-                    />
-                  </div>
-
-                  <div className="w-full sm:w-auto self-end pt-1 sm:pt-0">
-                    <button 
-                      onClick={handleAddCategory} 
-                      disabled={!newCategoryName.trim()}
-                      className="w-full sm:w-auto bg-neutral-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-black transition-colors flex items-center justify-center gap-2 text-sm shadow-sm cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" /> Add Category
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Hidden file input for category photo upload */}
+              {/* Hidden file inputs for category photo upload */}
               <input 
                 type="file" 
                 ref={catFileInputRef} 
@@ -1763,81 +2161,170 @@ export default function BranchManager() {
                 onChange={handleCategoryPhotoUpload} 
                 className="hidden" 
               />
+              <input 
+                type="file" 
+                ref={newCatFileInputRef} 
+                accept="image/*" 
+                onChange={handleNewCatImageSelect} 
+                className="hidden" 
+              />
+
+              {/* Add New Category Box */}
+              <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-200 mb-8 space-y-4">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">Add New Category</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1.5">Category Name *</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g. Seafood Starters, Signature Platters..." 
+                      value={newCategoryName} 
+                      onChange={e => setNewCategoryName(e.target.value)} 
+                      className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500" 
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-neutral-600 mb-1.5">Background Picture (Optional)</label>
+                    {newCategoryImage ? (
+                      <div className="flex items-center gap-3 p-2 bg-white border border-neutral-300 rounded-xl">
+                        <img src={newCategoryImage} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-neutral-200 shadow-sm" />
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs text-green-700 font-semibold block">Photo attached</span>
+                          <span className="text-[11px] text-neutral-400">Compressed</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 pr-1">
+                          <button 
+                            type="button" 
+                            onClick={() => newCatFileInputRef.current?.click()} 
+                            disabled={compressingNewCatImage}
+                            className="px-2.5 py-1 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
+                          >
+                            Change
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => setNewCategoryImage('')} 
+                            className="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => newCatFileInputRef.current?.click()}
+                        disabled={compressingNewCatImage}
+                        className="w-full py-2.5 px-3 border border-dashed border-neutral-300 hover:border-amber-500 hover:bg-amber-50/40 rounded-xl text-neutral-600 hover:text-amber-800 flex items-center justify-center gap-2 text-xs font-medium transition-colors bg-white"
+                      >
+                        <Camera className="w-4 h-4 text-neutral-400" />
+                        <span>{compressingNewCatImage ? 'Processing photo...' : 'Choose Category Background Photo'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button 
+                    onClick={handleAddCategory} 
+                    disabled={!newCategoryName.trim()}
+                    className="bg-neutral-900 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-black transition-colors flex items-center gap-2 text-sm shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" /> Add Category
+                  </button>
+                </div>
+              </div>
 
               {/* Categories List Table */}
-              <div className="border border-neutral-200 rounded-2xl overflow-hidden shadow-xs bg-white">
+              <div className="border border-neutral-200 rounded-2xl overflow-hidden shadow-sm bg-white">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-neutral-50/90 border-b border-neutral-200 text-xs font-bold uppercase tracking-wider text-neutral-500">
                     <tr>
-                      <th className="px-5 py-3.5 w-16 text-center">#</th>
+                      <th className="px-5 py-3.5">Background Photo</th>
                       <th className="px-5 py-3.5">Category Name</th>
-                      <th className="px-5 py-3.5">Card Background</th>
                       <th className="px-5 py-3.5">Dishes</th>
                       <th className="px-5 py-3.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {categories.map((c, idx) => {
+                    {categories.map(c => {
                       const count = menuItems.filter(m => m.category === c.name).length;
-                      const catBgUrl = c.imageUrl || c.image;
+                      const hasCustomPhoto = Boolean(c.imageUrl || c.image);
+                      const bgPhotoUrl = c.imageUrl || c.image || DEFAULT_CATEGORY_BG;
+                      const isUploadingThis = uploadingCatId === c.id;
 
                       return (
                         <tr key={c.id} className="hover:bg-neutral-50/70 transition-colors">
-                          <td className="px-5 py-3.5 text-center text-xs font-semibold text-neutral-400">
-                            {idx + 1}
-                          </td>
-
-                          <td className="px-5 py-3.5 font-bold text-neutral-900">
-                            <div className="flex items-center gap-2">
-                              <Tag className="w-4 h-4 text-amber-600 shrink-0" />
-                              <span>{c.name}</span>
-                            </div>
-                          </td>
-
-                          <td className="px-5 py-3.5">
+                          <td className="px-5 py-3">
                             <div className="flex items-center gap-3">
-                              <div className="w-12 h-10 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 shrink-0 relative">
-                                {catBgUrl ? (
-                                  <img 
-                                    src={catBgUrl} 
-                                    alt={c.name} 
-                                    className="w-full h-full object-cover" 
-                                  />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-neutral-400">
-                                    <ImageIcon className="w-4 h-4" />
-                                  </div>
-                                )}
+                              <div className="relative group w-16 h-12 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 shadow-sm shrink-0">
+                                <img 
+                                  src={bgPhotoUrl} 
+                                  alt={c.name} 
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform" 
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => triggerCategoryPhotoUpload(c.id)}
+                                  disabled={isUploadingThis}
+                                  className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"
+                                  title="Change background photo"
+                                >
+                                  <Camera className="w-4 h-4" />
+                                </button>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setUploadingCatId(c.id);
-                                  catFileInputRef.current?.click();
-                                }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors cursor-pointer"
-                                title="Change card background photo"
-                              >
-                                <Camera className="w-3.5 h-3.5" />
-                                <span>{catBgUrl ? 'Change Photo' : 'Add Photo'}</span>
-                              </button>
+                              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                hasCustomPhoto ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-neutral-100 text-neutral-600'
+                              }`}>
+                                {isUploadingThis ? 'Uploading...' : hasCustomPhoto ? 'Custom BG' : 'Default BG'}
+                              </span>
                             </div>
                           </td>
 
-                          <td className="px-5 py-3.5 text-neutral-500 font-medium">
+                          <td className="px-5 py-3 font-bold text-neutral-900">
+                            {c.name}
+                          </td>
+
+                          <td className="px-5 py-3 text-neutral-500 font-medium">
                             <span className="inline-block px-2.5 py-0.5 bg-neutral-100 rounded-md text-xs font-semibold text-neutral-700">
-                              {count} {count === 1 ? 'dish' : 'dishes'}
+                              {count} {count === 1 ? 'item' : 'items'}
                             </span>
                           </td>
 
-                          <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <td className="px-5 py-3 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-2">
-                              {/* Edit Name */}
+                              {/* Quick Upload / Change Photo button */}
+                              <button
+                                type="button"
+                                onClick={() => triggerCategoryPhotoUpload(c.id)}
+                                disabled={isUploadingThis}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                                title="Upload or change background photo"
+                              >
+                                <Camera className="w-3.5 h-3.5 text-neutral-500" />
+                                <span>{isUploadingThis ? 'Saving...' : hasCustomPhoto ? 'Change Photo' : 'Add Photo'}</span>
+                              </button>
+
+                              {/* Remove custom photo if present */}
+                              {hasCustomPhoto && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveCategoryPhoto(c)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition-colors"
+                                  title="Reset to default background photo"
+                                >
+                                  <span>Reset BG</span>
+                                </button>
+                              )}
+
+                              {/* Edit Name & Photo */}
                               <button
                                 type="button"
                                 onClick={() => handleStartEditCategory(c)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition-colors cursor-pointer"
-                                title="Edit category name"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition-colors"
+                                title="Edit category name or photo"
                               >
                                 <Edit3 className="w-3.5 h-3.5 text-neutral-500" />
                                 <span>Edit</span>
@@ -1847,7 +2334,7 @@ export default function BranchManager() {
                               <button
                                 type="button"
                                 onClick={() => handleRemoveCategory(c.id)}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 transition-colors"
                                 title="Delete category"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1860,7 +2347,7 @@ export default function BranchManager() {
                     })}
                     {categories.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="px-5 py-10 text-center text-neutral-500">
+                        <td colSpan={4} className="px-5 py-10 text-center text-neutral-500">
                           No categories found. Add your first category above!
                         </td>
                       </tr>
@@ -1890,7 +2377,7 @@ export default function BranchManager() {
               <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
                 <div>
                   <h3 className="font-bold text-lg text-neutral-900">Edit Menu Item</h3>
-                  <p className="text-xs text-neutral-500">Update item name, price, category, and dietary options</p>
+                  <p className="text-xs text-neutral-500">Update item details, dietary flags, or photo</p>
                 </div>
                 <button 
                   onClick={() => setEditingItem(null)}
@@ -1994,6 +2481,87 @@ export default function BranchManager() {
                     </button>
                   </div>
                 </div>
+
+                {/* Photo management */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600">Dish Photo</label>
+                    <span className="text-[11px] text-neutral-400">Upload file or enter image link</span>
+                  </div>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    ref={editFileInputRef} 
+                    onChange={handleEditImageSelect} 
+                    className="hidden" 
+                  />
+                  {editingItem.imageUrl ? (
+                    <div className="flex items-center gap-3 p-3 bg-neutral-50 border border-neutral-200 rounded-xl">
+                      <img 
+                        src={editingItem.imageUrl} 
+                        alt={editingItem.name} 
+                        className="w-16 h-16 object-cover rounded-lg border border-neutral-300 shadow-xs bg-white shrink-0" 
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=200&auto=format&fit=crop&q=60";
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs text-green-700 font-semibold block">Photo attached</span>
+                        <p className="text-[11px] text-neutral-400 truncate">Preview shown above. Ready to save.</p>
+                        <input
+                          type="text"
+                          value={editingItem.imageUrl.startsWith('data:') ? 'Compressed image ready' : editingItem.imageUrl}
+                          readOnly={editingItem.imageUrl.startsWith('data:')}
+                          onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
+                          placeholder="https://..."
+                          className="mt-1 w-full text-xs px-2 py-1 bg-white border border-neutral-200 rounded text-neutral-600 placeholder:text-neutral-400 outline-none"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => editFileInputRef.current?.click()}
+                          disabled={compressingEditImage}
+                          className="text-xs px-2.5 py-1.5 bg-white border border-neutral-300 hover:bg-neutral-100 rounded-lg text-neutral-700 font-medium transition-colors text-center"
+                        >
+                          {compressingEditImage ? '...' : 'Replace'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ ...editingItem, imageUrl: '' })}
+                          className="text-xs px-2.5 py-1.5 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg text-red-600 font-medium transition-colors text-center"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        onClick={() => editFileInputRef.current?.click()}
+                        disabled={compressingEditImage}
+                        className="w-full py-3.5 border-2 border-dashed border-neutral-300 hover:border-amber-400 hover:bg-amber-50/20 rounded-xl text-neutral-600 hover:text-amber-700 flex flex-col items-center justify-center gap-1 transition-colors bg-neutral-50/50"
+                      >
+                        <Camera className="w-5 h-5 text-amber-600" />
+                        <span className="text-xs font-semibold text-neutral-800">
+                          {compressingEditImage ? 'Compressing image...' : 'Upload photo from device / camera'}
+                        </span>
+                        <span className="text-[11px] text-neutral-400">JPG, PNG, or WEBP (auto-compressed)</span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-neutral-400 uppercase font-medium">Or URL:</span>
+                        <input
+                          type="url"
+                          placeholder="Paste image link (https://...)"
+                          value={editingItem.imageUrl || ''}
+                          onChange={(e) => setEditingItem({ ...editingItem, imageUrl: e.target.value })}
+                          className="flex-1 text-xs px-3 py-1.5 bg-white border border-neutral-300 rounded-lg text-neutral-800 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Modal Footer */}
@@ -2030,6 +2598,15 @@ export default function BranchManager() {
               onClick={() => setEditingCategory(null)}
             />
 
+            {/* Hidden file input for edit category modal */}
+            <input 
+              type="file" 
+              ref={editCatFileInputRef} 
+              accept="image/*" 
+              onChange={handleEditCatImageSelect} 
+              className="hidden" 
+            />
+
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -2040,7 +2617,7 @@ export default function BranchManager() {
               <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
                 <div>
                   <h3 className="text-lg font-bold text-neutral-900">Edit Category</h3>
-                  <p className="text-xs text-neutral-500">Update category title</p>
+                  <p className="text-xs text-neutral-500">Update category title and background photo</p>
                 </div>
                 <button
                   onClick={() => setEditingCategory(null)}
@@ -2062,6 +2639,57 @@ export default function BranchManager() {
                     onChange={(e) => setEditingCategory(prev => prev ? { ...prev, name: e.target.value } : null)}
                     className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                    Category Background Picture
+                  </label>
+                  
+                  <div className="relative rounded-2xl overflow-hidden border border-neutral-200 bg-neutral-950 aspect-[16/9] mb-3 group shadow-inner">
+                    <img 
+                      src={editingCategory.imageUrl || DEFAULT_CATEGORY_BG} 
+                      alt="Category Preview" 
+                      className="w-full h-full object-cover opacity-60" 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent flex flex-col justify-end p-4">
+                      <p className="text-white font-black text-xl drop-shadow-md">
+                        {editingCategory.name || 'Category Name'}
+                      </p>
+                      <p className="text-amber-400 text-xs font-semibold">
+                        Preview of category card presentation
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => editCatFileInputRef.current?.click()}
+                      disabled={compressingEditCatImage}
+                      className="absolute top-3 right-3 px-3 py-1.5 bg-black/70 hover:bg-black/90 text-white rounded-lg text-xs font-medium backdrop-blur-md transition-colors flex items-center gap-1.5 shadow"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                      <span>{compressingEditCatImage ? 'Processing...' : 'Change Photo'}</span>
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs text-neutral-500">
+                      {editingCategory.imageUrl ? (
+                        <span className="text-emerald-700 font-semibold">Custom background photo attached</span>
+                      ) : (
+                        <span>Currently using default culinary background</span>
+                      )}
+                    </div>
+                    {editingCategory.imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingCategory(prev => prev ? { ...prev, imageUrl: '' } : null)}
+                        className="text-xs text-red-600 hover:text-red-800 font-medium hover:underline"
+                      >
+                        Reset to default photo
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2141,11 +2769,20 @@ export default function BranchManager() {
                       className="p-3.5 bg-neutral-50 rounded-xl border border-neutral-200 flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-9 h-9 rounded-xl bg-neutral-200/70 border border-neutral-300 flex items-center justify-center shrink-0">
-                          <DietarySymbol isVeg={item.isVeg} size="sm" />
-                        </div>
+                        {(item.imageUrl || item.image) ? (
+                          <img
+                            src={item.imageUrl || item.image}
+                            alt={item.name}
+                            className="w-12 h-12 object-cover rounded-lg border border-neutral-200 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-lg bg-neutral-200 flex items-center justify-center text-neutral-400 shrink-0 text-xs">
+                            No Photo
+                          </div>
+                        )}
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
+                            <DietarySymbol isVeg={item.isVeg} size="sm" />
                             <h4 className="font-semibold text-sm text-neutral-900 truncate">{item.name}</h4>
                             <span className="text-xs font-semibold text-neutral-600 bg-neutral-200/70 px-2 py-0.5 rounded">
                               ₹{item.price}

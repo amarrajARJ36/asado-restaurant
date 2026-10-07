@@ -36,10 +36,8 @@ interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
-  const errMsg = error instanceof Error ? error.message : String(error);
-  const errCode = (error as any)?.code || '';
   const errInfo: FirestoreErrorInfo = {
-    error: errMsg,
+    error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
       email: auth.currentUser?.email,
@@ -53,20 +51,7 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
     },
     operationType,
     path
-  };
-
-  const isPermissionError = 
-    errCode === 'permission-denied' ||
-    errMsg.includes('insufficient permissions') ||
-    errMsg.includes('Missing or insufficient permissions') ||
-    errMsg.includes('PERMISSION_DENIED');
-
-  if (isPermissionError) {
-    console.error('Firestore Error: ', JSON.stringify(errInfo));
-    throw new Error(JSON.stringify(errInfo));
   }
-
-  // Quota limits (e.g. Free daily read units per project), network offline, or rate limit errors
-  // should log a clear warning rather than throwing an unhandled exception that breaks the app.
-  console.warn('Firestore Operation Warning: ', JSON.stringify(errInfo));
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
 }
