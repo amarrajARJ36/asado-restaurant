@@ -10,7 +10,7 @@ import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { useBanners } from '../../hooks/useBanners';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
-import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId } from '../../lib/localMenuStore';
+import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId, getResolvedMenuItems, getResolvedCategories } from '../../lib/localMenuStore';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -19,13 +19,15 @@ export default function KollamMenu() {
   const [selectedDish, setSelectedDish] = useState<any | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
-  const [kollamMenu, setKollamMenu] = useState<any[]>(() => {
-    const all = normalizeMenuItems(staticKollamMenu, staticKollamCategories);
-    const localDeleted = getLocalDeletedIds('kollam');
-    const localPurged = getLocalPurgedIds('kollam');
-    return all.filter((item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
+  const [kollamCategories, setKollamCategories] = useState<any[]>(() => {
+    return getResolvedCategories('kollam', staticKollamCategories);
   });
-  const [kollamCategories, setKollamCategories] = useState<any[]>(staticKollamCategories);
+  const [kollamMenu, setKollamMenu] = useState<any[]>(() => {
+    const cats = getResolvedCategories('kollam', staticKollamCategories);
+    return getResolvedMenuItems('kollam', staticKollamMenu, cats).active.filter(
+      (item: any) => item.isAvailable !== false
+    );
+  });
   const { banners } = useBanners('kollam');
 
   useEffect(() => {
@@ -39,38 +41,20 @@ export default function KollamMenu() {
   }, []);
 
   useEffect(() => {
-    let latestCategories: any[] = staticKollamCategories;
-    const initialDeleted = getLocalDeletedIds('kollam');
-    const initialPurged = getLocalPurgedIds('kollam');
-    let latestRawItems: any[] = staticKollamMenu.filter(
-      (item: any) => !initialDeleted.has(item.id) && !initialPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
-    );
+    let latestCategories: any[] = getResolvedCategories('kollam', staticKollamCategories);
+    let latestDbItems: any[] = [];
 
     const unsubCat = onSnapshot(
       query(collection(db, 'categories'), where('branchSlug', '==', 'kollam')),
       (snapshot) => {
         const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const dbCatMap = new Map(dbCats.map((cat: any) => [cat.id, cat]));
-        const merged = staticKollamCategories.map((staticCat: any) => {
-          const dbCat = dbCatMap.get(staticCat.id);
-          return dbCat ? { ...staticCat, ...dbCat } : staticCat;
-        });
-        const existingIds = new Set(staticKollamCategories.map(c => c.id));
-        dbCats.forEach((cat: any) => {
-          if (!existingIds.has(cat.id)) merged.push(cat);
-        });
-        const activeCats = merged.filter((cat: any) => cat.isDeleted !== true);
+        const activeCats = getResolvedCategories('kollam', staticKollamCategories, dbCats);
         latestCategories = activeCats;
         setKollamCategories(activeCats);
         preloadCategoryImages(activeCats);
         
-        // Re-normalize current dishes with latest categories, ensuring deleted/purged items are filtered
-        const currentDeleted = getLocalDeletedIds('kollam');
-        const currentPurged = getLocalPurgedIds('kollam');
-        const filteredItems = latestRawItems.filter(
-          (item: any) => !currentDeleted.has(item.id) && !currentPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
-        );
-        setKollamMenu(normalizeMenuItems(filteredItems, activeCats));
+        const resolved = getResolvedMenuItems('kollam', staticKollamMenu, activeCats, latestDbItems);
+        setKollamMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
       },
       (error) => {
         handleFirestoreError(error, OperationType.LIST, 'categories');
@@ -81,75 +65,9 @@ export default function KollamMenu() {
       query(collection(db, 'menuItems'), where('branchSlug', '==', 'kollam')),
       (snapshot) => {
         const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
-
-        const localDeleted = getLocalDeletedIds('kollam');
-        const localPurged = getLocalPurgedIds('kollam');
-
-        // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
-        const merged = staticKollamMenu.map((staticItem: any) => {
-          const dbItem = dbItemMap.get(staticItem.id);
-          const isLocallyDeleted = localDeleted.has(staticItem.id);
-          const isLocallyPurged = localPurged.has(staticItem.id);
-
-          if (!dbItem) {
-            return { 
-              ...staticItem, 
-              isAvailable: staticItem.isAvailable !== false,
-              isDeleted: isLocallyDeleted,
-              isPurged: isLocallyPurged
-            };
-          }
-
-          const isDeleted = dbItem.isDeleted !== undefined ? Boolean(dbItem.isDeleted) : isLocallyDeleted;
-          const isPurged = dbItem.isPurged !== undefined ? Boolean(dbItem.isPurged) : isLocallyPurged;
-
-          if (dbItem.isDeleted === false && isLocallyDeleted) {
-            setLocalDeletedId('kollam', staticItem.id, false);
-          }
-
-          const resolved: any = {
-            ...staticItem,
-            ...dbItem,
-            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
-            isDeleted,
-            isPurged
-          };
-          if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
-            resolved.imageUrl = undefined;
-            resolved.image = undefined;
-          }
-          return resolved;
-        });
-
-        // Add any custom items created in Firestore that aren't in static list
-        const existingIds = new Set(staticKollamMenu.map((i: any) => i.id));
-        dbItems.forEach((item: any) => {
-          if (!existingIds.has(item.id)) {
-            const isLocallyDeleted = localDeleted.has(item.id);
-            const isLocallyPurged = localPurged.has(item.id);
-            const isDeleted = item.isDeleted !== undefined ? Boolean(item.isDeleted) : isLocallyDeleted;
-            const isPurged = item.isPurged !== undefined ? Boolean(item.isPurged) : isLocallyPurged;
-
-            if (item.isDeleted === false && isLocallyDeleted) {
-              setLocalDeletedId('kollam', item.id, false);
-            }
-
-            merged.push({
-              ...item,
-              isAvailable: item.isAvailable !== false,
-              isDeleted,
-              isPurged
-            });
-          }
-        });
-
-        // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
-        const activeItems = merged.filter(
-          (item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
-        );
-        latestRawItems = activeItems;
-        setKollamMenu(normalizeMenuItems(activeItems, latestCategories));
+        latestDbItems = dbItems;
+        const resolved = getResolvedMenuItems('kollam', staticKollamMenu, latestCategories, dbItems);
+        setKollamMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
       },
       (error) => {
         console.warn('Firestore kollamMenu snapshot warning:', error);

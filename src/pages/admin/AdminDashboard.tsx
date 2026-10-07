@@ -5,7 +5,6 @@ import {
   ArrowRight, 
   UtensilsCrossed, 
   FolderTree, 
-  Image, 
   Tag, 
   ExternalLink,
   MapPin,
@@ -66,21 +65,18 @@ export default function AdminDashboard() {
                 key={branch.id}
                 className="bg-white rounded-3xl border border-neutral-200/90 shadow-xs hover:shadow-md hover:border-amber-400 transition-all duration-300 overflow-hidden flex flex-col group"
               >
-                {/* Branch Hero Image Banner */}
-                <div className="h-44 overflow-hidden relative bg-neutral-900">
-                  <img 
-                    src={branch.heroImage} 
-                    alt={branch.name} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-80"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
-                  
-                  {/* Status Badge */}
-                  <div className="absolute top-4 right-4">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider backdrop-blur-md shadow-xs ${
+                {/* Branch Header Banner (Image-Free as requested) */}
+                <div className="p-6 bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-800 text-white relative overflow-hidden border-b border-neutral-800">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-sm shadow-inner">
+                      <Store className="w-5 h-5 text-amber-500" />
+                    </div>
+                    
+                    {/* Status Badge */}
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
                       isActive 
-                        ? 'bg-emerald-500/90 text-white' 
-                        : 'bg-amber-500/90 text-neutral-950'
+                        ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400' 
+                        : 'bg-amber-500/15 border border-amber-500/30 text-amber-400'
                     }`}>
                       {isActive ? (
                         <>
@@ -96,13 +92,12 @@ export default function AdminDashboard() {
                     </span>
                   </div>
 
-                  {/* Branch Name on Image */}
-                  <div className="absolute bottom-4 left-4 right-4">
+                  <div>
                     <div className="flex items-center gap-1.5 text-amber-400 text-xs font-semibold mb-1">
                       <MapPin className="w-3.5 h-3.5" />
                       <span>{branch.city}, Kerala</span>
                     </div>
-                    <h3 className="text-2xl font-extrabold text-white tracking-tight leading-tight">
+                    <h3 className="text-xl font-extrabold text-white tracking-tight leading-tight">
                       {branch.name}
                     </h3>
                   </div>
@@ -120,34 +115,27 @@ export default function AdminDashboard() {
                       <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-400">
                         Management Sections:
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <Link
                           to={`/admin/branch/${branch.slug}`}
-                          className="flex items-center gap-2 p-2 rounded-xl bg-neutral-50 hover:bg-amber-50 border border-neutral-100 hover:border-amber-200 text-neutral-700 hover:text-amber-900 text-xs font-semibold transition-colors"
+                          className="flex items-center justify-center sm:justify-start gap-1.5 p-2 rounded-xl bg-neutral-50 hover:bg-amber-50 border border-neutral-100 hover:border-amber-200 text-neutral-700 hover:text-amber-900 text-xs font-semibold transition-colors"
                         >
                           <UtensilsCrossed className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           <span className="truncate">Menu Items</span>
                         </Link>
                         <Link
                           to={`/admin/branch/${branch.slug}`}
-                          className="flex items-center gap-2 p-2 rounded-xl bg-neutral-50 hover:bg-amber-50 border border-neutral-100 hover:border-amber-200 text-neutral-700 hover:text-amber-900 text-xs font-semibold transition-colors"
+                          className="flex items-center justify-center sm:justify-start gap-1.5 p-2 rounded-xl bg-neutral-50 hover:bg-amber-50 border border-neutral-100 hover:border-amber-200 text-neutral-700 hover:text-amber-900 text-xs font-semibold transition-colors"
                         >
                           <FolderTree className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                           <span className="truncate">Categories</span>
                         </Link>
                         <Link
                           to={`/admin/branch/${branch.slug}`}
-                          className="flex items-center gap-2 p-2 rounded-xl bg-neutral-50 hover:bg-amber-50 border border-neutral-100 hover:border-amber-200 text-neutral-700 hover:text-amber-900 text-xs font-semibold transition-colors"
+                          className="flex items-center justify-center sm:justify-start gap-1.5 p-2 rounded-xl bg-neutral-50 hover:bg-amber-50 border border-neutral-100 hover:border-amber-200 text-neutral-700 hover:text-amber-900 text-xs font-semibold transition-colors"
                         >
                           <Tag className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span className="truncate">Offers & Banners</span>
-                        </Link>
-                        <Link
-                          to={`/admin/branch/${branch.slug}`}
-                          className="flex items-center gap-2 p-2 rounded-xl bg-neutral-50 hover:bg-amber-50 border border-neutral-100 hover:border-amber-200 text-neutral-700 hover:text-amber-900 text-xs font-semibold transition-colors"
-                        >
-                          <Image className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span className="truncate">Gallery</span>
+                          <span className="truncate">Offers</span>
                         </Link>
                       </div>
                     </div>

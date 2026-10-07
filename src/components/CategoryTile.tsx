@@ -64,8 +64,7 @@ export default function CategoryTile({
           src={optimizedImg} 
           alt={category.name} 
           loading="eager"
-          // @ts-ignore fetchpriority is valid in modern browsers
-          fetchpriority={index < 8 ? "high" : "auto"}
+          fetchPriority={index < 8 ? "high" : "auto"}
           decoding="async"
           onLoad={() => setIsLoaded(true)}
           className={`w-full h-full object-cover group-hover:scale-110 transition-all duration-500 ${
