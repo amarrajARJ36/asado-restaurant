@@ -10,7 +10,8 @@ import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
-import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId, getResolvedMenuItems, getResolvedCategories } from '../../lib/localMenuStore';
+import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId, getResolvedMenuItems, getResolvedCategories, initBranchSync } from '../../lib/localMenuStore';
+import { syncService } from '../../lib/syncService';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -38,8 +39,8 @@ export default function AlappuzhaMenu() {
   const prevBanner = () => setCurrentBanner((prev) => (prev - 1 + banners.length) % banners.length);
 
   useEffect(() => {
-    // Immediately preload initial static category images into browser cache
-    preloadCategoryImages(staticAlappuzhaCategories);
+    // Immediately preload initial cached category images into browser cache
+    preloadCategoryImages(alappuzhaCategories);
 
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
     checkIsDesktop();
@@ -50,6 +51,31 @@ export default function AlappuzhaMenu() {
   useEffect(() => {
     let latestCategories: any[] = getResolvedCategories('alappuzha', staticAlappuzhaCategories);
     let latestDbItems: any[] = [];
+
+    const refreshLocal = () => {
+      const activeCats = getResolvedCategories('alappuzha', staticAlappuzhaCategories, latestDbItems);
+      latestCategories = activeCats.length > 0 ? activeCats : staticAlappuzhaCategories;
+      setAlappuzhaCategories(latestCategories);
+      preloadCategoryImages(latestCategories);
+      const resolved = getResolvedMenuItems('alappuzha', staticAlappuzhaMenu, latestCategories, latestDbItems);
+      setAlappuzhaMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
+      setMenuLoading(false);
+    };
+
+    // Central multi-device sync
+    initBranchSync('alappuzha', refreshLocal);
+    const unsubSync = syncService.subscribe((payload) => {
+      if (payload.branchSlug === 'alappuzha' || payload.branchSlug === 'all') {
+        initBranchSync('alappuzha', refreshLocal);
+      }
+    });
+
+    const handleCustomSyncEvent = (e: any) => {
+      if (e.detail?.branchSlug === 'alappuzha' || e.detail?.branchSlug === 'all') {
+        refreshLocal();
+      }
+    };
+    window.addEventListener('asado-sync-update', handleCustomSyncEvent);
 
     const unsubCat = onSnapshot(
       query(collection(db, 'categories'), where('branchSlug', '==', 'alappuzha')),
@@ -64,7 +90,7 @@ export default function AlappuzhaMenu() {
         setAlappuzhaMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'categories');
+        console.warn('Firestore categories snapshot warning:', error);
       }
     );
 
@@ -83,7 +109,12 @@ export default function AlappuzhaMenu() {
       }
     );
 
-    return () => { unsubMenu(); unsubCat(); };
+    return () => { 
+      unsubMenu(); 
+      unsubCat(); 
+      unsubSync();
+      window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
+    };
   }, []);
   
   const activeCategory = alappuzhaCategories.find(c => c.name === activeCategoryName) || alappuzhaCategories.find(c => c.id === activeCategoryName);

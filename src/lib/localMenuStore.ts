@@ -1,10 +1,28 @@
 import { normalizeMenuItems } from './categoryUtils';
+import { syncService } from './syncService';
 
 /**
- * Persistent local storage fallback for branch menu deletions, purges, edits, and custom items.
- * Ensures all admin changes (price, availability, name, description, new dishes, deletions)
- * stay 100% persistent on refresh even if Firestore hits daily read quotas or network delay.
+ * High-performance synchronization & persistence engine.
+ * Ensures:
+ * 1. 100% synchronization across multiple phones, laptops, and guest pages via central sync server.
+ * 2. Real-time broadcast so edits on Phone 1 reflect immediately on Phone 2 and guest menu.
+ * 3. Zero lag & zero image flash on Kollam / Alappuzha menu cards by caching uploaded category images.
+ * 4. Offline resilience with localStorage fallback when network is slow or Firestore hits quota limits.
  */
+
+// Auto-hydrate from injected server state if available (ensures frame-1 sync across all devices)
+if (typeof window !== 'undefined' && (window as any).__INITIAL_SYNC_STORE__) {
+  try {
+    const initialStore = (window as any).__INITIAL_SYNC_STORE__;
+    if (initialStore?.branches) {
+      Object.entries(initialStore.branches).forEach(([slug, bData]) => {
+        applyServerBranchState(slug, bData);
+      });
+    }
+  } catch (err) {
+    console.warn('Initial sync store hydration warning:', err);
+  }
+}
 
 function getBranchKeys(slug: string): string[] {
   if (!slug) return [];
@@ -33,7 +51,7 @@ export function getLocalDeletedIds(branchSlug: string): Set<string> {
         }
       }
     } catch {
-      // ignore JSON parse errors
+      // ignore
     }
   }
   return result;
@@ -46,11 +64,10 @@ export function setLocalDeletedId(branchSlug: string, id: string, isDeleted: boo
   
   if (isDeleted) {
     currentSet.add(id);
-    // Also update any saved local edit
-    saveLocalMenuItemEdit(branchSlug, { id, isDeleted: true });
+    saveLocalMenuItemEdit(branchSlug, { id, isDeleted: true }, false);
   } else {
     currentSet.delete(id);
-    saveLocalMenuItemEdit(branchSlug, { id, isDeleted: false, isPurged: false });
+    saveLocalMenuItemEdit(branchSlug, { id, isDeleted: false, isPurged: false }, false);
   }
 
   const serialized = JSON.stringify([...currentSet]);
@@ -61,6 +78,9 @@ export function setLocalDeletedId(branchSlug: string, id: string, isDeleted: boo
       console.error('Failed to update local deleted ids for key', k, err);
     }
   }
+
+  // Sync to server for instant multi-device propagation
+  syncService.sendUpdate(branchSlug, 'item_delete', { id, isDeleted });
 }
 
 /* -------------------------------------------------------------
@@ -81,7 +101,7 @@ export function getLocalPurgedIds(branchSlug: string): Set<string> {
         }
       }
     } catch {
-      // ignore JSON parse errors
+      // ignore
     }
   }
   return result;
@@ -102,12 +122,12 @@ export function setLocalPurgedId(branchSlug: string, id: string): void {
     }
   }
 
-  // Also remove from custom items if present
-  removeLocalCustomItem(branchSlug, id);
+  // Sync to server for instant multi-device propagation
+  syncService.sendUpdate(branchSlug, 'item_purge', { id });
 }
 
 /* -------------------------------------------------------------
- * 3. MENU ITEM EDITS / OVERRIDES (PRICE, NAME, STOCK, ETC.)
+ * 3. EDITED ITEMS (PRICES, AVAILABILITY, NAMES, VEG, CHEF REC)
  * ------------------------------------------------------------- */
 export function getLocalEditedItems(branchSlug: string): Record<string, any> {
   if (typeof window === 'undefined' || !branchSlug) return {};
@@ -130,46 +150,34 @@ export function getLocalEditedItems(branchSlug: string): Record<string, any> {
   return result;
 }
 
-export function saveLocalMenuItemEdit(branchSlug: string, itemData: any): void {
-  if (typeof window === 'undefined' || !branchSlug || !itemData || !itemData.id) return;
+export function saveLocalMenuItemEdit(branchSlug: string, editData: any, broadcastToServer = true): void {
+  if (typeof window === 'undefined' || !branchSlug || !editData || !editData.id) return;
   const keys = getBranchKeys(branchSlug);
-  const currentEdits = getLocalEditedItems(branchSlug);
+  const edits = getLocalEditedItems(branchSlug);
   
-  const existing = currentEdits[itemData.id] || {};
-  currentEdits[itemData.id] = {
-    ...existing,
-    ...itemData,
+  edits[editData.id] = {
+    ...(edits[editData.id] || {}),
+    ...editData,
     updatedAt: Date.now()
   };
 
-  const serialized = JSON.stringify(currentEdits);
+  const serialized = JSON.stringify(edits);
   for (const k of keys) {
     try {
       localStorage.setItem(`asado_edited_items_${k}`, serialized);
     } catch (err) {
-      console.error('Failed to save local menu edit for key', k, err);
+      console.error('Failed to save local menu item edit for key', k, err);
     }
   }
-}
 
-export function removeLocalMenuItemEdit(branchSlug: string, id: string): void {
-  if (typeof window === 'undefined' || !branchSlug || !id) return;
-  const keys = getBranchKeys(branchSlug);
-  const currentEdits = getLocalEditedItems(branchSlug);
-  delete currentEdits[id];
-
-  const serialized = JSON.stringify(currentEdits);
-  for (const k of keys) {
-    try {
-      localStorage.setItem(`asado_edited_items_${k}`, serialized);
-    } catch (err) {
-      console.error('Failed to remove local menu edit for key', k, err);
-    }
+  // Sync to server for instant multi-device propagation
+  if (broadcastToServer) {
+    syncService.sendUpdate(branchSlug, 'menu_edit', editData);
   }
 }
 
 /* -------------------------------------------------------------
- * 4. CUSTOM CREATED MENU ITEMS
+ * 4. CUSTOM DISHES ADDED BY ADMIN
  * ------------------------------------------------------------- */
 export function getLocalCustomItems(branchSlug: string): any[] {
   if (typeof window === 'undefined' || !branchSlug) return [];
@@ -201,9 +209,9 @@ export function saveLocalCustomItem(branchSlug: string, itemData: any): void {
   
   const index = items.findIndex(i => i.id === itemData.id);
   if (index >= 0) {
-    items[index] = { ...items[index], ...itemData };
+    items[index] = { ...items[index], ...itemData, updatedAt: Date.now() };
   } else {
-    items.push(itemData);
+    items.push({ ...itemData, updatedAt: Date.now() });
   }
 
   const serialized = JSON.stringify(items);
@@ -214,6 +222,9 @@ export function saveLocalCustomItem(branchSlug: string, itemData: any): void {
       console.error('Failed to save custom item for key', k, err);
     }
   }
+
+  // Sync to server for instant multi-device propagation
+  syncService.sendUpdate(branchSlug, 'custom_item', itemData);
 }
 
 export function removeLocalCustomItem(branchSlug: string, id: string): void {
@@ -229,6 +240,8 @@ export function removeLocalCustomItem(branchSlug: string, id: string): void {
       console.error('Failed to remove custom item for key', k, err);
     }
   }
+
+  syncService.sendUpdate(branchSlug, 'item_purge', { id });
 }
 
 /* -------------------------------------------------------------
@@ -257,7 +270,7 @@ export function saveLocalCategoryEdit(branchSlug: string, catData: any): void {
   if (typeof window === 'undefined' || !branchSlug || !catData || !catData.id) return;
   const keys = getBranchKeys(branchSlug);
   const edits = getLocalCategoryEdits(branchSlug);
-  edits[catData.id] = { ...(edits[catData.id] || {}), ...catData };
+  edits[catData.id] = { ...(edits[catData.id] || {}), ...catData, updatedAt: Date.now() };
 
   const serialized = JSON.stringify(edits);
   for (const k of keys) {
@@ -267,6 +280,9 @@ export function saveLocalCategoryEdit(branchSlug: string, catData: any): void {
       console.error('Failed to save category edit for key', k, err);
     }
   }
+
+  // Sync to server for instant multi-device propagation
+  syncService.sendUpdate(branchSlug, 'category_edit', catData);
 }
 
 export function getLocalCustomCategories(branchSlug: string): any[] {
@@ -306,6 +322,9 @@ export function saveLocalCustomCategory(branchSlug: string, catData: any): void 
       console.error('Failed to save custom category for key', k, err);
     }
   }
+
+  // Sync to server for instant multi-device propagation
+  syncService.sendUpdate(branchSlug, 'category_custom', catData);
 }
 
 export function getLocalDeletedCategoryIds(branchSlug: string): Set<string> {
@@ -342,16 +361,101 @@ export function setLocalDeletedCategoryId(branchSlug: string, id: string, isDele
       console.error('Failed to update deleted cats for key', k, err);
     }
   }
+
+  syncService.sendUpdate(branchSlug, 'category_delete', { id });
 }
 
 /* -------------------------------------------------------------
- * 6. MASTER RESOLUTION FUNCTIONS (BULLETPROOF HYDRATION)
+ * 6. MULTI-DEVICE SERVER STATE HYDRATION
+ * ------------------------------------------------------------- */
+
+/**
+ * Merges server data into local storage so all devices share the exact same state.
+ */
+export function applyServerBranchState(branchSlug: string, serverData: any): void {
+  if (typeof window === 'undefined' || !branchSlug || !serverData) return;
+  const keys = getBranchKeys(branchSlug);
+
+  // 1. Menu edits - authoritative from central server
+  if (serverData.menuEdits && typeof serverData.menuEdits === 'object') {
+    const serialized = JSON.stringify(serverData.menuEdits);
+    for (const k of keys) {
+      localStorage.setItem(`asado_edited_items_${k}`, serialized);
+    }
+  }
+
+  // 2. Custom dishes - authoritative from central server
+  if (Array.isArray(serverData.customItems)) {
+    const serialized = JSON.stringify(serverData.customItems);
+    for (const k of keys) {
+      localStorage.setItem(`asado_custom_items_${k}`, serialized);
+    }
+  }
+
+  // 3. Deleted IDs - authoritative from central server
+  if (Array.isArray(serverData.deletedIds)) {
+    const serialized = JSON.stringify(serverData.deletedIds);
+    for (const k of keys) {
+      localStorage.setItem(`asado_deleted_items_${k}`, serialized);
+    }
+  }
+
+  // 4. Purged IDs - authoritative from central server
+  if (Array.isArray(serverData.purgedIds)) {
+    const serialized = JSON.stringify(serverData.purgedIds);
+    for (const k of keys) {
+      localStorage.setItem(`asado_purged_items_${k}`, serialized);
+    }
+  }
+
+  // 5. Category edits (including uploaded images) - authoritative from central server
+  if (serverData.categoryEdits && typeof serverData.categoryEdits === 'object') {
+    const serialized = JSON.stringify(serverData.categoryEdits);
+    for (const k of keys) {
+      localStorage.setItem(`asado_category_edits_${k}`, serialized);
+    }
+  }
+
+  // 6. Custom categories - authoritative from central server
+  if (Array.isArray(serverData.customCategories)) {
+    const serialized = JSON.stringify(serverData.customCategories);
+    for (const k of keys) {
+      localStorage.setItem(`asado_custom_cats_${k}`, serialized);
+    }
+  }
+
+  // 7. Deleted category IDs - authoritative from central server
+  if (Array.isArray(serverData.deletedCategoryIds)) {
+    const serialized = JSON.stringify(serverData.deletedCategoryIds);
+    for (const k of keys) {
+      localStorage.setItem(`asado_deleted_cats_${k}`, serialized);
+    }
+  }
+}
+
+/**
+ * Initializes synchronization for a branch:
+ * Pulls central server state to ensure Phone 2 gets Phone 1's edits and images instantly.
+ */
+export async function initBranchSync(branchSlug: string, onUpdate?: () => void): Promise<void> {
+  if (typeof window === 'undefined' || !branchSlug) return;
+  const s = branchSlug.toLowerCase();
+
+  // Pull latest authoritative state from central server
+  const serverData = await syncService.getBranchState(s);
+  if (serverData) {
+    applyServerBranchState(s, serverData);
+    if (onUpdate) onUpdate();
+  }
+}
+
+/* -------------------------------------------------------------
+ * 7. MASTER RESOLUTION FUNCTIONS (BULLETPROOF HYDRATION)
  * ------------------------------------------------------------- */
 
 /**
  * Resolves menu items by blending static base items, Firestore real-time items,
  * local storage edits, local custom items, and deleted/purged tracking.
- * This guarantees that refreshing the browser NEVER loses edits or deleted dishes.
  */
 export function getResolvedMenuItems(
   branchSlug: string,
@@ -464,6 +568,10 @@ export function getResolvedMenuItems(
 /**
  * Resolves categories by blending static base categories, Firestore categories,
  * and local storage additions/edits/deletions.
+ * 
+ * CRITICAL FIX FOR MENU CARDS BACKGROUND LAG:
+ * Caches resolved categories persistently so on initial page render, the uploaded image
+ * is rendered IMMEDIATELY instead of flashing the original Unsplash photo!
  */
 export function getResolvedCategories(
   branchSlug: string,
@@ -476,14 +584,40 @@ export function getResolvedCategories(
 
   const dbCatMap = new Map(firestoreCategories.map((c: any) => [c.id, c]));
 
+  // If firestoreCategories is empty, check if we have persistently cached categories
+  // which already contain uploaded images from previous visits or server sync
+  const cacheKey = `asado_resolved_cats_cache_${branchSlug.toLowerCase()}`;
+  let cachedCats: Record<string, any> = {};
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) {
+          arr.forEach((c: any) => { if (c?.id) cachedCats[c.id] = c; });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   const mergedStatic = staticCategories.map((sc: any) => {
     const dbCat = dbCatMap.get(sc.id) || {};
     const localEdit = localCatEdits[sc.id] || {};
+    const cached = cachedCats[sc.id] || {};
     const isDeleted = localDeletedCats.has(sc.id) || dbCat.isDeleted === true || localEdit.isDeleted === true;
+
+    // Prioritize uploaded image: dbCat.imageUrl > localEdit.imageUrl > cached.imageUrl > sc.image
+    const imageUrl = dbCat.imageUrl || dbCat.image || localEdit.imageUrl || localEdit.image || (cached.imageUrl && cached.imageUrl !== sc.image ? cached.imageUrl : undefined) || sc.image;
+
     return {
       ...sc,
+      ...cached,
       ...dbCat,
       ...localEdit,
+      imageUrl,
+      image: imageUrl,
       isDeleted
     };
   });
@@ -502,15 +636,30 @@ export function getResolvedCategories(
 
   const mergedCustom = Array.from(customMap.values()).map((c: any) => {
     const localEdit = localCatEdits[c.id] || {};
+    const cached = cachedCats[c.id] || {};
     const isDeleted = localDeletedCats.has(c.id) || c.isDeleted === true || localEdit.isDeleted === true;
+    const imageUrl = c.imageUrl || c.image || localEdit.imageUrl || localEdit.image || cached.imageUrl || cached.image;
+
     return {
       ...c,
+      ...cached,
       ...localEdit,
+      imageUrl,
+      image: imageUrl,
       isDeleted
     };
   });
 
-  return [...mergedStatic, ...mergedCustom].filter(c => !c.isDeleted);
+  const finalCats = [...mergedStatic, ...mergedCustom].filter(c => !c.isDeleted);
+
+  // Persist resolved categories so future page loads have uploaded images IMMEDIATELY
+  if (typeof window !== 'undefined' && finalCats.length > 0) {
+    try {
+      localStorage.setItem(cacheKey, JSON.stringify(finalCats));
+    } catch {
+      // ignore quota
+    }
+  }
+
+  return finalCats;
 }
-
-

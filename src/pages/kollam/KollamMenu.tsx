@@ -10,7 +10,8 @@ import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { useBanners } from '../../hooks/useBanners';
 import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
-import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId, getResolvedMenuItems, getResolvedCategories } from '../../lib/localMenuStore';
+import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId, getResolvedMenuItems, getResolvedCategories, initBranchSync } from '../../lib/localMenuStore';
+import { syncService } from '../../lib/syncService';
 
 const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
 
@@ -31,8 +32,8 @@ export default function KollamMenu() {
   const { banners } = useBanners('kollam');
 
   useEffect(() => {
-    // Immediately preload initial static category images into browser cache
-    preloadCategoryImages(staticKollamCategories);
+    // Immediately preload initial cached category images into browser cache
+    preloadCategoryImages(kollamCategories);
 
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
     checkIsDesktop();
@@ -43,6 +44,30 @@ export default function KollamMenu() {
   useEffect(() => {
     let latestCategories: any[] = getResolvedCategories('kollam', staticKollamCategories);
     let latestDbItems: any[] = [];
+
+    const refreshLocal = () => {
+      const activeCats = getResolvedCategories('kollam', staticKollamCategories, latestDbItems);
+      latestCategories = activeCats;
+      setKollamCategories(activeCats);
+      preloadCategoryImages(activeCats);
+      const resolved = getResolvedMenuItems('kollam', staticKollamMenu, activeCats, latestDbItems);
+      setKollamMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
+    };
+
+    // Central Multi-device sync (Phone 1 -> Phone 2 & guest menu)
+    initBranchSync('kollam', refreshLocal);
+    const unsubSync = syncService.subscribe((payload) => {
+      if (payload.branchSlug === 'kollam' || payload.branchSlug === 'all') {
+        initBranchSync('kollam', refreshLocal);
+      }
+    });
+
+    const handleCustomSyncEvent = (e: any) => {
+      if (e.detail?.branchSlug === 'kollam' || e.detail?.branchSlug === 'all') {
+        refreshLocal();
+      }
+    };
+    window.addEventListener('asado-sync-update', handleCustomSyncEvent);
 
     const unsubCat = onSnapshot(
       query(collection(db, 'categories'), where('branchSlug', '==', 'kollam')),
@@ -57,7 +82,7 @@ export default function KollamMenu() {
         setKollamMenu(resolved.active.filter((item: any) => item.isAvailable !== false));
       },
       (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'categories');
+        console.warn('Firestore categories snapshot warning:', error);
       }
     );
 
@@ -74,7 +99,12 @@ export default function KollamMenu() {
       }
     );
 
-    return () => { unsubMenu(); unsubCat(); };
+    return () => { 
+      unsubMenu(); 
+      unsubCat(); 
+      unsubSync();
+      window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
+    };
   }, []);
   
   // To handle the sliding panel state

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../lib/firebase';
+import { db } from '../lib/firebase';
+import { syncService } from '../lib/syncService';
 
 export interface Banner {
   id: string;
@@ -98,6 +99,27 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
     }
     checkSeed();
 
+    // Sync from central server
+    const fetchServerBanners = async () => {
+      try {
+        const res = await fetch('/api/sync/state');
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json?.banners) && json.banners.length > 0) {
+            setAllBanners(json.banners);
+            saveStoredBanners(json.banners);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    fetchServerBanners();
+
+    const unsubSync = syncService.subscribe(() => {
+      fetchServerBanners();
+    });
+
     const unsubscribe = onSnapshot(collection(db, 'banners'), (snapshot) => {
       const fbBanners = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Banner));
       // Sort newest first
@@ -107,12 +129,15 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
       setAllBanners(finalBanners);
       setLoading(false);
     }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'banners');
+      console.warn('Firestore banners snapshot warning:', error);
       setAllBanners(getStoredBanners());
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubSync();
+    };
   }, []);
 
   // Filter for display
@@ -162,37 +187,58 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
       saveStoredBanners(next);
       return next;
     });
+    syncService.sendUpdate(newBanner.branchSlug || 'all', 'banner', newBanner);
     try {
       await setDoc(doc(db, 'banners', id), newBanner, { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `banners/${id}`);
+      console.warn('Firestore banner create warning:', error);
     }
     return id;
   };
 
   const updateBanner = async (id: string, updates: Partial<Banner>) => {
+    let updatedBanner: Banner | null = null;
     setAllBanners(prev => {
-      const next = prev.map(b => b.id === id ? { ...b, ...updates } : b);
+      const next = prev.map(b => {
+        if (b.id === id) {
+          updatedBanner = { ...b, ...updates };
+          return updatedBanner;
+        }
+        return b;
+      });
       saveStoredBanners(next);
       return next;
     });
+    if (updatedBanner) {
+      syncService.sendUpdate((updatedBanner as Banner).branchSlug || 'all', 'banner', updatedBanner);
+    }
     try {
       await setDoc(doc(db, 'banners', id), updates, { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `banners/${id}`);
+      console.warn('Firestore banner update warning:', error);
     }
   };
 
   const toggleBanner = async (id: string, newActiveState: boolean) => {
+    let toggledBanner: Banner | null = null;
     setAllBanners(prev => {
-      const next = prev.map(b => b.id === id ? { ...b, isActive: newActiveState } : b);
+      const next = prev.map(b => {
+        if (b.id === id) {
+          toggledBanner = { ...b, isActive: newActiveState };
+          return toggledBanner;
+        }
+        return b;
+      });
       saveStoredBanners(next);
       return next;
     });
+    if (toggledBanner) {
+      syncService.sendUpdate((toggledBanner as Banner).branchSlug || 'all', 'banner', toggledBanner);
+    }
     try {
       await setDoc(doc(db, 'banners', id), { isActive: newActiveState }, { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `banners/${id}`);
+      console.warn('Firestore banner toggle warning:', error);
     }
   };
 
@@ -205,7 +251,7 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
     try {
       await deleteDoc(doc(db, 'banners', id));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `banners/${id}`);
+      console.warn('Firestore banner delete warning:', error);
     }
   };
 

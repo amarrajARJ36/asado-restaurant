@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useParams, Link } from 'react-router-dom';
 import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
 import { useState, useEffect, useRef } from 'react';
-import { Utensils, Tag, Store, Plus, Trash2, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List } from 'lucide-react';
+import { Utensils, Tag, Store, Plus, Trash2, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List, Camera, Image as ImageIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -22,8 +22,10 @@ import {
   saveLocalCustomCategory,
   setLocalDeletedCategoryId,
   getResolvedMenuItems,
-  getResolvedCategories
+  getResolvedCategories,
+  initBranchSync
 } from '../../lib/localMenuStore';
+import { syncService } from '../../lib/syncService';
 
 export default function BranchManager() {
   const { branchId } = useParams();
@@ -97,6 +99,74 @@ export default function BranchManager() {
   } | null>(null);
 
   const [newCategoryName, setNewCategoryName] = useState('');
+  const catFileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingCatId, setUploadingCatId] = useState<string | null>(null);
+
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.onerror = reject;
+      };
+      reader.onerror = reject;
+    });
+  };
+
+  const handleCategoryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !uploadingCatId || !branchId) return;
+
+    try {
+      const compressed = await compressImage(file);
+      const updateData = {
+        id: uploadingCatId,
+        imageUrl: compressed,
+        image: compressed,
+        branchSlug: branchId,
+        updatedAt: Date.now()
+      };
+      saveLocalCategoryEdit(branchId, updateData);
+      setCategories(prev => prev.map(c => c.id === uploadingCatId ? { ...c, ...updateData } : c));
+      try {
+        await setDoc(doc(db, 'categories', uploadingCatId), updateData, { merge: true });
+      } catch (err) {
+        console.warn('Firestore category photo sync warning:', err);
+      }
+    } catch (err) {
+      console.error('Error compressing category photo:', err);
+    } finally {
+      setUploadingCatId(null);
+      if (catFileInputRef.current) catFileInputRef.current.value = '';
+    }
+  };
 
   // Edit Category Modal State
   const [editingCategory, setEditingCategory] = useState<{
@@ -106,6 +176,29 @@ export default function BranchManager() {
 
   useEffect(() => {
     if (!branchId) return;
+
+    const refreshBranchData = () => {
+      const currentCats = getResolvedCategories(branchId, rawBaseCategories);
+      setCategories(currentCats);
+      const resolved = getResolvedMenuItems(branchId, rawBaseItems, currentCats);
+      setMenuItems(resolved.active);
+      setDeletedItems(resolved.deleted);
+    };
+
+    // Multi-device central sync
+    initBranchSync(branchId, refreshBranchData);
+    const unsubSync = syncService.subscribe((payload) => {
+      if (payload.branchSlug === branchId || payload.branchSlug === 'all') {
+        initBranchSync(branchId, refreshBranchData);
+      }
+    });
+
+    const handleCustomSync = (e: any) => {
+      if (e.detail?.branchSlug === branchId || e.detail?.branchSlug === 'all') {
+        refreshBranchData();
+      }
+    };
+    window.addEventListener('asado-sync-update', handleCustomSync);
 
     const qMenu = query(collection(db, 'menuItems'), where('branchSlug', '==', branchId));
     const unsubMenu = onSnapshot(qMenu, (snapshot) => {
@@ -127,7 +220,12 @@ export default function BranchManager() {
       console.warn('Firestore categories snapshot warning:', error);
     });
   
-    return () => { unsubMenu(); unsubCat(); };
+    return () => { 
+      unsubMenu(); 
+      unsubCat(); 
+      unsubSync();
+      window.removeEventListener('asado-sync-update', handleCustomSync);
+    };
   }, [branchId, rawBaseItems, rawBaseCategories]);
 
   // Sync banner state for this branch
@@ -1657,6 +1755,15 @@ export default function BranchManager() {
                 </div>
               </div>
 
+              {/* Hidden file input for category photo upload */}
+              <input 
+                type="file" 
+                ref={catFileInputRef} 
+                accept="image/*" 
+                onChange={handleCategoryPhotoUpload} 
+                className="hidden" 
+              />
+
               {/* Categories List Table */}
               <div className="border border-neutral-200 rounded-2xl overflow-hidden shadow-xs bg-white">
                 <table className="w-full text-left text-sm">
@@ -1664,6 +1771,7 @@ export default function BranchManager() {
                     <tr>
                       <th className="px-5 py-3.5 w-16 text-center">#</th>
                       <th className="px-5 py-3.5">Category Name</th>
+                      <th className="px-5 py-3.5">Card Background</th>
                       <th className="px-5 py-3.5">Dishes</th>
                       <th className="px-5 py-3.5 text-right">Actions</th>
                     </tr>
@@ -1671,6 +1779,7 @@ export default function BranchManager() {
                   <tbody className="divide-y divide-neutral-200">
                     {categories.map((c, idx) => {
                       const count = menuItems.filter(m => m.category === c.name).length;
+                      const catBgUrl = c.imageUrl || c.image;
 
                       return (
                         <tr key={c.id} className="hover:bg-neutral-50/70 transition-colors">
@@ -1682,6 +1791,36 @@ export default function BranchManager() {
                             <div className="flex items-center gap-2">
                               <Tag className="w-4 h-4 text-amber-600 shrink-0" />
                               <span>{c.name}</span>
+                            </div>
+                          </td>
+
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-12 h-10 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 shrink-0 relative">
+                                {catBgUrl ? (
+                                  <img 
+                                    src={catBgUrl} 
+                                    alt={c.name} 
+                                    className="w-full h-full object-cover" 
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-neutral-400">
+                                    <ImageIcon className="w-4 h-4" />
+                                  </div>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setUploadingCatId(c.id);
+                                  catFileInputRef.current?.click();
+                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-colors cursor-pointer"
+                                title="Change card background photo"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                                <span>{catBgUrl ? 'Change Photo' : 'Add Photo'}</span>
+                              </button>
                             </div>
                           </td>
 
@@ -1721,7 +1860,7 @@ export default function BranchManager() {
                     })}
                     {categories.length === 0 && (
                       <tr>
-                        <td colSpan={4} className="px-5 py-10 text-center text-neutral-500">
+                        <td colSpan={5} className="px-5 py-10 text-center text-neutral-500">
                           No categories found. Add your first category above!
                         </td>
                       </tr>
