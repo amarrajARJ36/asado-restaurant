@@ -31,4 +31,8 @@ export interface FoodItem {
   isChefRecommendation: boolean;
   order?: number;
   status?: string;
+  isAvailable?: boolean;
+  isDeleted?: boolean;
+  isPurged?: boolean;
+  deletedAt?: number | null;
 }

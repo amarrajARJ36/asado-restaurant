@@ -1,0 +1,39 @@
+{
+  "branches": {
+    "kollam": {
+      "menuEdits": {
+        "c11_1": {
+          "id": "c11_1",
+          "price": 280,
+          "updatedAt": 1791385655383
+        }
+      },
+      "customItems": [],
+      "deletedIds": [],
+      "purgedIds": [],
+      "categoryEdits": {},
+      "customCategories": [],
+      "deletedCategoryIds": []
+    },
+    "alappuzha": {
+      "menuEdits": {},
+      "customItems": [],
+      "deletedIds": [],
+      "purgedIds": [],
+      "categoryEdits": {},
+      "customCategories": [],
+      "deletedCategoryIds": []
+    },
+    "varkala": {
+      "menuEdits": {},
+      "customItems": [],
+      "deletedIds": [],
+      "purgedIds": [],
+      "categoryEdits": {},
+      "customCategories": [],
+      "deletedCategoryIds": []
+    }
+  },
+  "banners": [],
+  "lastUpdated": 1791385655383
+}

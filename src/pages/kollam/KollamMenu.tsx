@@ -1,162 +1,38 @@
 import { useState, useMemo, useEffect } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { Search, Flame, ArrowRight, X, Filter } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { kollamMenu as staticKollamMenu, kollamCategories as staticKollamCategories } from '../../data';
-import { normalizeMenuItems } from '../../lib/categoryUtils';
 import DietarySymbol from '../../components/DietarySymbol';
 import DishDetailModal from '../../components/DishDetailModal';
 import CategoryTile from '../../components/CategoryTile';
 import { useBanners } from '../../hooks/useBanners';
-import { optimizeImageUrl, preloadCategoryImages } from '../../lib/imageOptimization';
-import { getLocalDeletedIds, getLocalPurgedIds, setLocalDeletedId } from '../../lib/localMenuStore';
-
-const COMMON_CATEGORY_BG = "https://images.unsplash.com/photo-1544025162-d76694265947?q=75&w=600&auto=format&fit=crop";
+import { optimizeImageUrl } from '../../lib/imageOptimization';
+import { useMenuSync } from '../../lib/menuSync';
 
 export default function KollamMenu() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDish, setSelectedDish] = useState<any | null>(null);
   const [activeCategoryName, setActiveCategoryName] = useState<string | null>(null);
   const [isDesktop, setIsDesktop] = useState(true);
-  const [kollamMenu, setKollamMenu] = useState<any[]>(() => {
-    const all = normalizeMenuItems(staticKollamMenu, staticKollamCategories);
-    const localDeleted = getLocalDeletedIds('kollam');
-    const localPurged = getLocalPurgedIds('kollam');
-    return all.filter((item: any) => !localDeleted.has(item.id) && !localPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false);
-  });
-  const [kollamCategories, setKollamCategories] = useState<any[]>(staticKollamCategories);
+
+  // Synced menu hook - guarantees instant real-time sync across devices and no reverts on refresh
+  const {
+    normalizedActiveItems: rawKollamMenu,
+    categories: kollamCategories,
+    loading: menuLoading
+  } = useMenuSync('kollam');
+
+  // Customer guest menu only shows available (not sold out) dishes
+  const kollamMenu = useMemo(() => {
+    return rawKollamMenu.filter(item => item.isAvailable !== false);
+  }, [rawKollamMenu]);
+
   const { banners } = useBanners('kollam');
 
   useEffect(() => {
-    // Immediately preload initial static category images into browser cache
-    preloadCategoryImages(staticKollamCategories);
-
     const checkIsDesktop = () => setIsDesktop(window.innerWidth >= 768);
     checkIsDesktop();
     window.addEventListener('resize', checkIsDesktop);
     return () => window.removeEventListener('resize', checkIsDesktop);
-  }, []);
-
-  useEffect(() => {
-    let latestCategories: any[] = staticKollamCategories;
-    const initialDeleted = getLocalDeletedIds('kollam');
-    const initialPurged = getLocalPurgedIds('kollam');
-    let latestRawItems: any[] = staticKollamMenu.filter(
-      (item: any) => !initialDeleted.has(item.id) && !initialPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
-    );
-
-    const unsubCat = onSnapshot(
-      query(collection(db, 'categories'), where('branchSlug', '==', 'kollam')),
-      (snapshot) => {
-        const dbCats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const dbCatMap = new Map(dbCats.map((cat: any) => [cat.id, cat]));
-        const merged = staticKollamCategories.map((staticCat: any) => {
-          const dbCat = dbCatMap.get(staticCat.id);
-          return dbCat ? { ...staticCat, ...dbCat } : staticCat;
-        });
-        const existingIds = new Set(staticKollamCategories.map(c => c.id));
-        dbCats.forEach((cat: any) => {
-          if (!existingIds.has(cat.id)) merged.push(cat);
-        });
-        const activeCats = merged.filter((cat: any) => cat.isDeleted !== true);
-        latestCategories = activeCats;
-        setKollamCategories(activeCats);
-        preloadCategoryImages(activeCats);
-        
-        // Re-normalize current dishes with latest categories, ensuring deleted/purged items are filtered
-        const currentDeleted = getLocalDeletedIds('kollam');
-        const currentPurged = getLocalPurgedIds('kollam');
-        const filteredItems = latestRawItems.filter(
-          (item: any) => !currentDeleted.has(item.id) && !currentPurged.has(item.id) && item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
-        );
-        setKollamMenu(normalizeMenuItems(filteredItems, activeCats));
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, 'categories');
-      }
-    );
-
-    const unsubMenu = onSnapshot(
-      query(collection(db, 'menuItems'), where('branchSlug', '==', 'kollam')),
-      (snapshot) => {
-        const dbItems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        const dbItemMap = new Map(dbItems.map((item: any) => [item.id, item]));
-
-        const localDeleted = getLocalDeletedIds('kollam');
-        const localPurged = getLocalPurgedIds('kollam');
-
-        // Deep merge static items with Firestore updates so partial doc updates don't wipe static fields
-        const merged = staticKollamMenu.map((staticItem: any) => {
-          const dbItem = dbItemMap.get(staticItem.id);
-          const isLocallyDeleted = localDeleted.has(staticItem.id);
-          const isLocallyPurged = localPurged.has(staticItem.id);
-
-          if (!dbItem) {
-            return { 
-              ...staticItem, 
-              isAvailable: staticItem.isAvailable !== false,
-              isDeleted: isLocallyDeleted,
-              isPurged: isLocallyPurged
-            };
-          }
-
-          const isDeleted = dbItem.isDeleted !== undefined ? Boolean(dbItem.isDeleted) : isLocallyDeleted;
-          const isPurged = dbItem.isPurged !== undefined ? Boolean(dbItem.isPurged) : isLocallyPurged;
-
-          if (dbItem.isDeleted === false && isLocallyDeleted) {
-            setLocalDeletedId('kollam', staticItem.id, false);
-          }
-
-          const resolved: any = {
-            ...staticItem,
-            ...dbItem,
-            isAvailable: dbItem.isAvailable !== undefined ? dbItem.isAvailable : (staticItem.isAvailable !== false),
-            isDeleted,
-            isPurged
-          };
-          if (dbItem.imageUrl === null || dbItem.imageUrl === '') {
-            resolved.imageUrl = undefined;
-            resolved.image = undefined;
-          }
-          return resolved;
-        });
-
-        // Add any custom items created in Firestore that aren't in static list
-        const existingIds = new Set(staticKollamMenu.map((i: any) => i.id));
-        dbItems.forEach((item: any) => {
-          if (!existingIds.has(item.id)) {
-            const isLocallyDeleted = localDeleted.has(item.id);
-            const isLocallyPurged = localPurged.has(item.id);
-            const isDeleted = item.isDeleted !== undefined ? Boolean(item.isDeleted) : isLocallyDeleted;
-            const isPurged = item.isPurged !== undefined ? Boolean(item.isPurged) : isLocallyPurged;
-
-            if (item.isDeleted === false && isLocallyDeleted) {
-              setLocalDeletedId('kollam', item.id, false);
-            }
-
-            merged.push({
-              ...item,
-              isAvailable: item.isAvailable !== false,
-              isDeleted,
-              isPurged
-            });
-          }
-        });
-
-        // Filter out soft-deleted, permanently purged, and unavailable (sold out) items from customer menu
-        const activeItems = merged.filter(
-          (item: any) => item.isDeleted !== true && item.isPurged !== true && item.isAvailable !== false
-        );
-        latestRawItems = activeItems;
-        setKollamMenu(normalizeMenuItems(activeItems, latestCategories));
-      },
-      (error) => {
-        console.warn('Firestore kollamMenu snapshot warning:', error);
-      }
-    );
-
-    return () => { unsubMenu(); unsubCat(); };
   }, []);
   
   // To handle the sliding panel state
@@ -396,18 +272,24 @@ export default function KollamMenu() {
                 <div className="w-12 h-1.5 bg-neutral-300 rounded-full" />
               </div>
 
-              {/* Panel Header with common background */}
+              {/* Panel Header */}
               <div className="relative px-6 py-5 md:py-7 md:px-8 border-b border-neutral-200 flex items-center justify-between sticky top-0 overflow-hidden z-10 bg-neutral-900 text-white">
-                <div className="absolute inset-0 z-0 bg-neutral-900">
-                  <img 
-                    src={optimizeImageUrl(activeCategory.imageUrl || activeCategory.image || COMMON_CATEGORY_BG, 600, 75)} 
-                    alt={activeCategory.name} 
-                    loading="eager"
-                    decoding="async"
-                    className="w-full h-full object-cover opacity-35" 
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-900/80 to-black/50" />
-                </div>
+                {(activeCategory.imageUrl || activeCategory.image) ? (
+                  <div className="absolute inset-0 z-0 bg-neutral-900">
+                    <img 
+                      src={optimizeImageUrl(activeCategory.imageUrl || activeCategory.image, 600, 75)} 
+                      alt={activeCategory.name} 
+                      loading="eager"
+                      decoding="async"
+                      className="w-full h-full object-cover opacity-35" 
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-900/80 to-black/50" />
+                  </div>
+                ) : (
+                  <div className="absolute inset-0 z-0 bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950">
+                    <div className="absolute -top-10 -right-10 w-44 h-44 rounded-full bg-amber-500/10 blur-2xl pointer-events-none" />
+                  </div>
+                )}
 
                 <div className="relative z-10">
                   <h2 className="text-2xl font-bold text-white drop-shadow-md">{activeCategory.name}</h2>

@@ -1,0 +1,93 @@
+{
+  "branchSlug": "alappuzha",
+  "version": 2,
+  "lastUpdated": 1791389202537,
+  "items": [
+    {
+      "id": "f5",
+      "branch_id": "b2",
+      "category_id": "c5",
+      "name": "Karimeen Pollichathu",
+      "price": 750,
+      "description": "Pearl spot fish marinated in rich Kerala spices and baked in banana leaf.",
+      "image": "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600&q=75&auto=format&fit=crop",
+      "isVeg": false,
+      "isChefRecommendation": true,
+      "branchSlug": "alappuzha",
+      "isAvailable": true,
+      "isDeleted": false,
+      "isPurged": false
+    },
+    {
+      "id": "f6",
+      "branch_id": "b2",
+      "category_id": "c5",
+      "name": "Kuttanadan Duck Roast",
+      "price": 680,
+      "description": "Traditional slow-roasted duck with aromatic spices.",
+      "image": "https://images.unsplash.com/photo-1604908176997-125f25cc6f3d?q=80&w=600&q=75&auto=format&fit=crop",
+      "isVeg": false,
+      "isChefRecommendation": true,
+      "branchSlug": "alappuzha",
+      "isAvailable": true,
+      "isDeleted": false,
+      "isPurged": false
+    },
+    {
+      "id": "f7",
+      "branch_id": "b2",
+      "category_id": "c7",
+      "name": "Tapioca Cutlet",
+      "price": 280,
+      "description": "Crispy cutlets made with seasoned tapioca.",
+      "image": "https://images.unsplash.com/photo-1626700051175-6818013e1d4f?q=80&w=600&q=75&auto=format&fit=crop",
+      "isVeg": true,
+      "isChefRecommendation": false,
+      "branchSlug": "alappuzha",
+      "isAvailable": true,
+      "isDeleted": false,
+      "isPurged": false
+    },
+    {
+      "id": "f8",
+      "branch_id": "b2",
+      "category_id": "c8",
+      "name": "Coconut Paradise",
+      "price": 220,
+      "description": "Tender coconut water blended with mint and honey.",
+      "image": "https://images.unsplash.com/photo-1550966871-3ed3cdb5ed0c?q=80&w=600&q=75&auto=format&fit=crop",
+      "isVeg": true,
+      "isChefRecommendation": false,
+      "branchSlug": "alappuzha",
+      "isAvailable": true,
+      "isDeleted": false,
+      "isPurged": false
+    }
+  ],
+  "categories": [
+    {
+      "id": "c5",
+      "branch_id": "b2",
+      "name": "Backwater Specials",
+      "branchSlug": "alappuzha"
+    },
+    {
+      "id": "c6",
+      "branch_id": "b2",
+      "name": "Family Combos",
+      "branchSlug": "alappuzha"
+    },
+    {
+      "id": "c7",
+      "branch_id": "b2",
+      "name": "Appetizers",
+      "branchSlug": "alappuzha"
+    },
+    {
+      "id": "c8",
+      "branch_id": "b2",
+      "name": "Beverages",
+      "branchSlug": "alappuzha"
+    }
+  ]
+}

@@ -8,6 +8,9 @@ import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
 import { useBanners } from '../../hooks/useBanners';
+import { alappuzhaGallery as staticAlappuzhaGallery } from '../../data';
+import { getResolvedGalleryImages, initBranchSync } from '../../lib/localMenuStore';
+import { syncService } from '../../lib/syncService';
 
 const TRAVEL_GROUPS = [
   { id: 'couple', label: 'Couple', icon: Heart },
@@ -77,19 +80,47 @@ export default function AlappuzhaHome() {
   const { hash } = useLocation();
   const [activeGroup, setActiveGroup] = useState<string>('couple');
   const [activeGallery, setActiveGallery] = useState('All');
-  const [galleryImages, setGalleryImages] = useState<any[]>([]);
+  const [galleryImages, setGalleryImages] = useState<any[]>(() => {
+    return getResolvedGalleryImages('alappuzha', staticAlappuzhaGallery);
+  });
   const { banners } = useBanners('alappuzha');
 
   useEffect(() => {
-    const q = query(collection(db, 'galleryImages'), where('branchSlug', '==', 'alappuzha'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const images = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setGalleryImages(images.sort((a: any, b: any) => b.createdAt - a.createdAt));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'galleryImages');
+    let latestDbImages: any[] = [];
+
+    const refreshGallery = () => {
+      const resolved = getResolvedGalleryImages('alappuzha', staticAlappuzhaGallery, latestDbImages);
+      setGalleryImages(resolved);
+    };
+
+    initBranchSync('alappuzha', refreshGallery);
+    const unsubSync = syncService.subscribe((payload) => {
+      if (payload.branchSlug === 'alappuzha' || payload.branchSlug === 'all') {
+        initBranchSync('alappuzha', refreshGallery);
+      }
     });
 
-    return () => unsubscribe();
+    const handleCustomSyncEvent = (e: any) => {
+      if (e.detail?.branchSlug === 'alappuzha' || e.detail?.branchSlug === 'all') {
+        refreshGallery();
+      }
+    };
+    window.addEventListener('asado-sync-update', handleCustomSyncEvent);
+
+    const q = query(collection(db, 'galleryImages'), where('branchSlug', '==', 'alappuzha'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      latestDbImages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      refreshGallery();
+    }, (error) => {
+      console.warn('Firestore gallery snapshot warning in Alappuzha:', error);
+      refreshGallery();
+    });
+
+    return () => {
+      unsubscribe();
+      unsubSync();
+      window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
+    };
   }, []);
 
   useEffect(() => {
