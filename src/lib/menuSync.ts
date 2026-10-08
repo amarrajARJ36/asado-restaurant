@@ -97,7 +97,18 @@ function getLocalCache(branchSlug: string): { items: SyncedMenuItem[]; categorie
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0 && Array.isArray(parsed.categories)) {
-        return parsed;
+        const normalizedCats = parsed.categories.map((c: any) => {
+          const photo = c.imageUrl || c.image || null;
+          return {
+            ...c,
+            imageUrl: photo,
+            image: photo
+          };
+        });
+        return {
+          ...parsed,
+          categories: normalizedCats
+        };
       }
     }
   } catch (err) {
@@ -109,9 +120,25 @@ function getLocalCache(branchSlug: string): { items: SyncedMenuItem[]; categorie
 function setLocalCache(branchSlug: string, data: { items: SyncedMenuItem[]; categories: SyncedCategory[]; version: number }) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(`${CACHE_KEY_PREFIX}${branchSlug}`, JSON.stringify(data));
+    const compactCats = data.categories.map(c => {
+      const copy: any = { ...c };
+      const photo = copy.image || copy.imageUrl || null;
+      if (photo) {
+        copy.image = photo;
+        delete copy.imageUrl;
+      }
+      return copy;
+    });
+    localStorage.setItem(`${CACHE_KEY_PREFIX}${branchSlug}`, JSON.stringify({
+      ...data,
+      categories: compactCats
+    }));
   } catch (err) {
     console.warn('Error setting menu sync cache:', err);
+    try {
+      const keysToClear = Object.keys(localStorage).filter(k => k.startsWith('asado_temp_'));
+      keysToClear.forEach(k => localStorage.removeItem(k));
+    } catch {}
   }
 }
 
@@ -156,9 +183,17 @@ export function useMenuSync(branchSlug: string | undefined) {
           const data = snapshot.data();
           if (data && Array.isArray(data.items) && data.items.length > 0) {
             const incomingItems = data.items as SyncedMenuItem[];
-            const incomingCats = Array.isArray(data.categories) && data.categories.length > 0
+            const rawCats = Array.isArray(data.categories) && data.categories.length > 0
               ? (data.categories as SyncedCategory[])
               : categoriesRef.current;
+            const incomingCats = rawCats.map((c: any) => {
+              const photo = c.imageUrl || c.image || null;
+              return {
+                ...c,
+                imageUrl: photo,
+                image: photo
+              };
+            });
             const incomingVersion = typeof data.version === 'number' ? data.version : (versionRef.current + 1);
 
             setItems(incomingItems);
@@ -211,7 +246,12 @@ export function useMenuSync(branchSlug: string | undefined) {
           if (Array.isArray(data?.items) && data.items.length > 0) {
             setItems(data.items);
             if (Array.isArray(data.categories) && data.categories.length > 0) {
-              setCategories(data.categories);
+              const normalized = data.categories.map((c: any) => ({
+                ...c,
+                imageUrl: c.imageUrl || c.image || null,
+                image: c.image || c.imageUrl || null
+              }));
+              setCategories(normalized);
             }
             if (data.version) {
               setVersion(data.version);
@@ -242,15 +282,35 @@ export function useMenuSync(branchSlug: string | undefined) {
       version: newVersion
     });
 
-    // 2. Broadcast to Firestore single consolidated doc (real-time sync across devices)
+    // 2. Prepare lightweight payload for Firestore branchMenus single doc:
+    // Strip duplicate base64 photo strings so document stays far below 1MB
+    const cleanedCats = newCats.map(cat => {
+      const copy: any = { ...cat };
+      const photo = copy.image || copy.imageUrl || null;
+      if (photo) {
+        copy.image = photo;
+        delete copy.imageUrl;
+      }
+      return copy;
+    });
+
+    const cleanedItems = newItems.map(item => {
+      const copy: any = { ...item };
+      if (copy.imageUrl && copy.image && copy.imageUrl === copy.image) {
+        delete copy.imageUrl;
+      }
+      return copy;
+    });
+
+    // Broadcast to Firestore single consolidated doc (real-time sync across devices)
     try {
       const docRef = doc(db, 'branchMenus', safeSlug);
       await setDoc(docRef, {
         branchSlug: safeSlug,
         version: newVersion,
         lastUpdated: Date.now(),
-        items: newItems,
-        categories: newCats
+        items: cleanedItems,
+        categories: cleanedCats
       }, { merge: true });
     } catch (err) {
       console.warn('Firestore branchMenus sync warning:', err);
@@ -420,8 +480,11 @@ export function useMenuSync(branchSlug: string | undefined) {
 
   // Save / Update Category
   const saveCategory = useCallback(async (cat: SyncedCategory) => {
+    const photo = cat.image || cat.imageUrl || null;
     const catWithSlug: SyncedCategory = {
       ...cat,
+      image: photo,
+      imageUrl: photo,
       branchSlug: safeSlug
     };
 

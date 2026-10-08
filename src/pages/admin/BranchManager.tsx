@@ -6,7 +6,7 @@ import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { compressImage } from '../../lib/imageCompressor';
+import { compressImage, compressCategoryPhoto, recompressDataUrl } from '../../lib/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
 import { useBanners, Banner } from '../../hooks/useBanners';
@@ -139,6 +139,37 @@ export default function BranchManager() {
 
     return () => { unsubscribe(); };
   }, [branchId]);
+
+  // Auto-optimize legacy oversized category photos to save Firestore & localStorage bandwidth
+  const optimizedCategoriesRef = useRef(false);
+  useEffect(() => {
+    if (optimizedCategoriesRef.current || !categories || categories.length === 0 || !branchId) return;
+    const oversized = categories.filter(c => {
+      const raw = c.image || c.imageUrl;
+      return typeof raw === 'string' && raw.length > 35000;
+    });
+    if (oversized.length === 0) return;
+
+    optimizedCategoriesRef.current = true;
+    (async () => {
+      for (const c of oversized) {
+        const rawPhoto = (c.image || c.imageUrl) as string;
+        try {
+          const shrunk = await recompressDataUrl(rawPhoto, 22000);
+          if (shrunk && shrunk.length < rawPhoto.length) {
+            await syncSaveCategory({
+              ...c,
+              image: shrunk,
+              imageUrl: shrunk,
+              branchSlug: branchId
+            });
+          }
+        } catch (e) {
+          console.warn('Auto-optimizing category photo skipped for', c.name, e);
+        }
+      }
+    })();
+  }, [categories, branchId, syncSaveCategory]);
 
   // Sync banner state for this branch
   useEffect(() => {
@@ -605,11 +636,11 @@ export default function BranchManager() {
     if (!file) return;
     setCompressingNewCatImage(true);
     try {
-      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      const compressed = await compressCategoryPhoto(file);
       setNewCategoryImage(compressed);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to compress category image", err);
-      alert("Could not process image.");
+      alert(`Could not process image: ${err?.message || 'Please try another image'}`);
     } finally {
       setCompressingNewCatImage(false);
       if (newCatFileInputRef.current) newCatFileInputRef.current.value = '';
@@ -647,16 +678,16 @@ export default function BranchManager() {
 
     setUploadingCatId(targetCatId);
     try {
-      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      const compressed = await compressCategoryPhoto(file);
       await syncSaveCategory({
         ...catToUpdate,
         image: compressed,
         imageUrl: compressed,
         branchSlug: branchId
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to process category photo", err);
-      alert("Could not upload category photo.");
+      alert(`Could not upload category photo: ${err?.message || 'Please try another image'}`);
     } finally {
       setUploadingCatId(null);
       setTargetCatId(null);
@@ -686,11 +717,11 @@ export default function BranchManager() {
     if (!file || !editingCategory) return;
     setCompressingEditCatImage(true);
     try {
-      const compressed = await compressImage(file, { maxWidth: 1000, quality: 0.75 });
+      const compressed = await compressCategoryPhoto(file);
       setEditingCategory(prev => prev ? { ...prev, imageUrl: compressed } : null);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to compress edit category image", err);
-      alert("Could not process image.");
+      alert(`Could not process image: ${err?.message || 'Please try another image'}`);
     } finally {
       setCompressingEditCatImage(false);
       if (editCatFileInputRef.current) editCatFileInputRef.current.value = '';
