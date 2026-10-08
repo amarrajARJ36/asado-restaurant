@@ -93,79 +93,111 @@ export async function compressImage(
  * Ensures a branch can have 30+ category photos without ever exceeding Firestore's 1MB limit.
  */
 export async function compressCategoryPhoto(file: File): Promise<string> {
-  const isImageMime = file.type && file.type.startsWith('image/');
+  // Allow all image MIME types and image extensions
+  const isImageMime = !file.type || file.type.startsWith('image/');
   const isImageExt = /\.(jpe?g|png|webp|gif|bmp|avif|heic|heif|svg)$/i.test(file.name || '');
-  if (!isImageMime && !isImageExt && file.type !== '') {
+  if (!isImageMime && !isImageExt) {
     throw new Error('Selected file is not an image. Please choose an image file (JPEG, PNG, WEBP).');
   }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Failed to read file from your device.'));
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Unable to decode image file.'));
-      img.onload = () => {
-        const maxWidth = 500;
-        const maxHeight = 380;
-        let width = img.width;
-        let height = img.height;
+    reader.onload = async (e) => {
+      const rawDataUrl = e.target?.result as string;
+      if (!rawDataUrl) {
+        reject(new Error('Empty image file.'));
+        return;
+      }
 
-        if (width > height) {
-          if (width > maxWidth) {
-            height = Math.round((height * maxWidth) / width);
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = Math.round((width * maxHeight) / height);
-            height = maxHeight;
-          }
-        }
+      // Try browser Canvas first
+      const runCanvas = (): Promise<string> => {
+        return new Promise((res, rej) => {
+          const img = new Image();
+          img.onerror = () => rej(new Error('Unable to decode image file.'));
+          img.onload = () => {
+            const maxWidth = 480;
+            const maxHeight = 320;
+            let width = img.width;
+            let height = img.height;
 
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, width);
-        canvas.height = Math.max(1, height);
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          reject(new Error('Canvas context could not be created.'));
-          return;
-        }
+            if (width > height) {
+              if (width > maxWidth) {
+                height = Math.round((height * maxWidth) / width);
+                width = maxWidth;
+              }
+            } else {
+              if (height > maxHeight) {
+                width = Math.round((width * maxHeight) / height);
+                height = maxHeight;
+              }
+            }
 
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, width);
+            canvas.height = Math.max(1, height);
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              rej(new Error('Canvas context could not be created.'));
+              return;
+            }
 
-        // Quality cascade to guarantee size is strictly under 25KB
-        let dataUrl = canvas.toDataURL('image/webp', 0.65);
-        if (!dataUrl.startsWith('data:image/webp')) {
-          dataUrl = canvas.toDataURL('image/jpeg', 0.60);
-        }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        if (dataUrl.length > 25000) {
-          // Step 1: Lower quality slightly
-          dataUrl = canvas.toDataURL('image/webp', 0.48);
-          if (!dataUrl.startsWith('data:image/webp')) {
-            dataUrl = canvas.toDataURL('image/jpeg', 0.45);
-          }
-        }
-
-        if (dataUrl.length > 25000) {
-          // Step 2: Downsample dimensions slightly
-          const smallCanvas = document.createElement('canvas');
-          smallCanvas.width = Math.round(canvas.width * 0.75);
-          smallCanvas.height = Math.round(canvas.height * 0.75);
-          const smallCtx = smallCanvas.getContext('2d');
-          if (smallCtx) {
-            smallCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
-            dataUrl = smallCanvas.toDataURL('image/webp', 0.45);
+            // Quality cascade to guarantee size is strictly under 25KB
+            let dataUrl = canvas.toDataURL('image/webp', 0.65);
             if (!dataUrl.startsWith('data:image/webp')) {
-              dataUrl = smallCanvas.toDataURL('image/jpeg', 0.42);
+              dataUrl = canvas.toDataURL('image/jpeg', 0.60);
+            }
+
+            if (dataUrl.length > 25000) {
+              dataUrl = canvas.toDataURL('image/webp', 0.48);
+              if (!dataUrl.startsWith('data:image/webp')) {
+                dataUrl = canvas.toDataURL('image/jpeg', 0.45);
+              }
+            }
+
+            if (dataUrl.length > 25000) {
+              const smallCanvas = document.createElement('canvas');
+              smallCanvas.width = Math.round(canvas.width * 0.75);
+              smallCanvas.height = Math.round(canvas.height * 0.75);
+              const smallCtx = smallCanvas.getContext('2d');
+              if (smallCtx) {
+                smallCtx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+                dataUrl = smallCanvas.toDataURL('image/webp', 0.45);
+                if (!dataUrl.startsWith('data:image/webp')) {
+                  dataUrl = smallCanvas.toDataURL('image/jpeg', 0.42);
+                }
+              }
+            }
+
+            res(dataUrl);
+          };
+          img.src = rawDataUrl;
+        });
+      };
+
+      try {
+        const clientCompressed = await runCanvas();
+        resolve(clientCompressed);
+      } catch (clientErr) {
+        // Fallback to server sharp compression if available
+        try {
+          const res = await fetch('/api/compress-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: rawDataUrl, maxWidth: 480, maxHeight: 320, quality: 65 })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.compressed) {
+              resolve(data.compressed);
+              return;
             }
           }
-        }
-
-        resolve(dataUrl);
-      };
-      img.src = e.target?.result as string;
+        } catch {}
+        reject(clientErr);
+      }
     };
     reader.readAsDataURL(file);
   });

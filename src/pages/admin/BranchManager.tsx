@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useParams, Link } from 'react-router-dom';
 import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
 import { useState, useEffect, useRef } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -100,6 +100,13 @@ export default function BranchManager() {
   const catFileInputRef = useRef<HTMLInputElement>(null);
   const [targetCatId, setTargetCatId] = useState<string | null>(null);
   const [uploadingCatId, setUploadingCatId] = useState<string | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!successToast) return;
+    const t = setTimeout(() => setSuccessToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [successToast]);
 
   // Edit Category Modal State
   const [editingCategory, setEditingCategory] = useState<{
@@ -661,22 +668,29 @@ export default function BranchManager() {
     await syncSaveCategory(catData);
     setNewCategoryName('');
     setNewCategoryImage('');
+    setSuccessToast(`Category "${catData.name}" created!`);
   };
 
   const triggerCategoryPhotoUpload = (catId: string) => {
     setTargetCatId(catId);
-    setTimeout(() => {
-      catFileInputRef.current?.click();
-    }, 50);
+    catFileInputRef.current?.click();
   };
 
-  const handleCategoryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCategoryPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, catId?: string) => {
     const file = e.target.files?.[0];
-    if (!file || !targetCatId || !branchId) return;
-    const catToUpdate = categories.find(c => c.id === targetCatId);
-    if (!catToUpdate) return;
+    const targetId = catId || targetCatId;
+    if (!file || !targetId || !branchId) return;
 
-    setUploadingCatId(targetCatId);
+    // Reset input value so selecting the same file again will always trigger onChange
+    e.target.value = '';
+
+    const catToUpdate = categories.find(c => c.id === targetId);
+    if (!catToUpdate) {
+      console.warn("Category to update not found for id:", targetId);
+      return;
+    }
+
+    setUploadingCatId(targetId);
     try {
       const compressed = await compressCategoryPhoto(file);
       await syncSaveCategory({
@@ -685,13 +699,13 @@ export default function BranchManager() {
         imageUrl: compressed,
         branchSlug: branchId
       });
+      setSuccessToast(`Background photo saved for ${catToUpdate.name}!`);
     } catch (err: any) {
       console.error("Failed to process category photo", err);
       alert(`Could not upload category photo: ${err?.message || 'Please try another image'}`);
     } finally {
       setUploadingCatId(null);
       setTargetCatId(null);
-      if (catFileInputRef.current) catFileInputRef.current.value = '';
     }
   };
 
@@ -702,6 +716,7 @@ export default function BranchManager() {
       imageUrl: null,
       branchSlug: branchId
     });
+    setSuccessToast(`Background photo reset for ${cat.name}!`);
   };
 
   const handleStartEditCategory = (cat: any) => {
@@ -724,7 +739,7 @@ export default function BranchManager() {
       alert(`Could not process image: ${err?.message || 'Please try another image'}`);
     } finally {
       setCompressingEditCatImage(false);
-      if (editCatFileInputRef.current) editCatFileInputRef.current.value = '';
+      e.target.value = '';
     }
   };
 
@@ -738,6 +753,7 @@ export default function BranchManager() {
         image: editingCategory.imageUrl || null,
         imageUrl: editingCategory.imageUrl || null
       });
+      setSuccessToast(`Category "${editingCategory.name}" updated!`);
       setEditingCategory(null);
     } catch (e) {
       console.error('handleSaveEditCategory error:', e);
@@ -1928,22 +1944,6 @@ export default function BranchManager() {
                 </div>
               </div>
 
-              {/* Hidden file inputs for category photo upload */}
-              <input 
-                type="file" 
-                ref={catFileInputRef} 
-                accept="image/*" 
-                onChange={handleCategoryPhotoUpload} 
-                className="hidden" 
-              />
-              <input 
-                type="file" 
-                ref={newCatFileInputRef} 
-                accept="image/*" 
-                onChange={handleNewCatImageSelect} 
-                className="hidden" 
-              />
-
               {/* Add New Category Box */}
               <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-200 mb-8 space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">Add New Category</h3>
@@ -1962,6 +1962,14 @@ export default function BranchManager() {
 
                   <div>
                     <label className="block text-xs font-semibold text-neutral-600 mb-1.5">Background Picture (Optional)</label>
+                    <input 
+                      id="new-category-file-input"
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleNewCatImageSelect} 
+                      className="hidden" 
+                      disabled={compressingNewCatImage}
+                    />
                     {newCategoryImage ? (
                       <div className="flex items-center gap-3 p-2 bg-white border border-neutral-300 rounded-xl">
                         <img src={newCategoryImage} alt="Preview" className="w-12 h-12 rounded-lg object-cover border border-neutral-200 shadow-sm" />
@@ -1970,14 +1978,12 @@ export default function BranchManager() {
                           <span className="text-[11px] text-neutral-400">Compressed</span>
                         </div>
                         <div className="flex items-center gap-1.5 pr-1">
-                          <button 
-                            type="button" 
-                            onClick={() => newCatFileInputRef.current?.click()} 
-                            disabled={compressingNewCatImage}
-                            className="px-2.5 py-1 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors"
+                          <label 
+                            htmlFor="new-category-file-input"
+                            className="px-2.5 py-1 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded-lg transition-colors cursor-pointer"
                           >
                             Change
-                          </button>
+                          </label>
                           <button 
                             type="button" 
                             onClick={() => setNewCategoryImage('')} 
@@ -1988,15 +1994,17 @@ export default function BranchManager() {
                         </div>
                       </div>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => newCatFileInputRef.current?.click()}
-                        disabled={compressingNewCatImage}
-                        className="w-full py-2.5 px-3 border border-dashed border-neutral-300 hover:border-amber-500 hover:bg-amber-50/40 rounded-xl text-neutral-600 hover:text-amber-800 flex items-center justify-center gap-2 text-xs font-medium transition-colors bg-white"
+                      <label
+                        htmlFor="new-category-file-input"
+                        className="w-full py-2.5 px-3 border border-dashed border-neutral-300 hover:border-amber-500 hover:bg-amber-50/40 rounded-xl text-neutral-600 hover:text-amber-800 flex items-center justify-center gap-2 text-xs font-medium transition-colors bg-white cursor-pointer"
                       >
-                        <Camera className="w-4 h-4 text-neutral-400" />
+                        {compressingNewCatImage ? (
+                          <Loader2 className="w-4 h-4 text-amber-600 animate-spin" />
+                        ) : (
+                          <Camera className="w-4 h-4 text-neutral-400" />
+                        )}
                         <span>{compressingNewCatImage ? 'Processing photo...' : 'Choose Category Background Photo'}</span>
-                      </button>
+                      </label>
                     )}
                   </div>
                 </div>
@@ -2032,6 +2040,15 @@ export default function BranchManager() {
                       return (
                         <tr key={c.id} className="hover:bg-neutral-50/70 transition-colors">
                           <td className="px-5 py-3">
+                            {/* Hidden native input specific to this category */}
+                            <input 
+                              id={`cat-file-upload-${c.id}`}
+                              type="file" 
+                              accept="image/*" 
+                              onChange={(e) => handleCategoryPhotoUpload(e, c.id)} 
+                              className="hidden" 
+                              disabled={isUploadingThis}
+                            />
                             <div className="flex items-center gap-3">
                               <div className="relative group w-16 h-12 rounded-lg overflow-hidden border border-neutral-200 bg-neutral-100 shadow-sm shrink-0 flex items-center justify-center">
                                 {hasCustomPhoto ? (
@@ -2045,20 +2062,23 @@ export default function BranchManager() {
                                     <Camera className="w-5 h-5 text-neutral-400" />
                                   </div>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => triggerCategoryPhotoUpload(c.id)}
-                                  disabled={isUploadingThis}
+                                <label
+                                  htmlFor={`cat-file-upload-${c.id}`}
                                   className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white cursor-pointer"
                                   title="Upload category photo"
                                 >
-                                  <Camera className="w-4 h-4" />
-                                </button>
+                                  {isUploadingThis ? (
+                                    <Loader2 className="w-4 h-4 text-white animate-spin" />
+                                  ) : (
+                                    <Camera className="w-4 h-4" />
+                                  )}
+                                </label>
                               </div>
                               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                                isUploadingThis ? 'bg-amber-100 text-amber-800 border border-amber-300' :
                                 hasCustomPhoto ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-neutral-100 text-neutral-500'
                               }`}>
-                                {isUploadingThis ? 'Uploading...' : hasCustomPhoto ? 'Uploaded' : 'No photo'}
+                                {isUploadingThis ? 'Saving...' : hasCustomPhoto ? 'Uploaded' : 'No photo'}
                               </span>
                             </div>
                           </td>
@@ -2076,23 +2096,30 @@ export default function BranchManager() {
                           <td className="px-5 py-3 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-2">
                               {/* Quick Upload / Change Photo button */}
-                              <button
-                                type="button"
-                                onClick={() => triggerCategoryPhotoUpload(c.id)}
-                                disabled={isUploadingThis}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300 transition-colors"
+                              <label
+                                htmlFor={`cat-file-upload-${c.id}`}
+                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                  isUploadingThis 
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300 opacity-80 cursor-wait'
+                                    : 'text-neutral-700 hover:text-amber-800 bg-neutral-100 hover:bg-amber-100/80 border border-neutral-200 hover:border-amber-300'
+                                }`}
                                 title="Upload or change background photo"
                               >
-                                <Camera className="w-3.5 h-3.5 text-neutral-500" />
-                                <span>{isUploadingThis ? 'Saving...' : hasCustomPhoto ? 'Change Photo' : 'Add Photo'}</span>
-                              </button>
+                                {isUploadingThis ? (
+                                  <Loader2 className="w-3.5 h-3.5 text-amber-700 animate-spin" />
+                                ) : (
+                                  <Camera className="w-3.5 h-3.5 text-neutral-500" />
+                                )}
+                                <span>{isUploadingThis ? 'Saving photo...' : hasCustomPhoto ? 'Change Photo' : 'Add Photo'}</span>
+                              </label>
 
                               {/* Remove custom photo if present */}
                               {hasCustomPhoto && (
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveCategoryPhoto(c)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition-colors"
+                                  disabled={isUploadingThis}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-neutral-600 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200 transition-colors disabled:opacity-50"
                                   title="Reset to default background photo"
                                 >
                                   <span>Reset BG</span>
@@ -2448,15 +2475,25 @@ export default function BranchManager() {
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => editCatFileInputRef.current?.click()}
-                      disabled={compressingEditCatImage}
+                    <label
+                      htmlFor="edit-cat-modal-file-input"
                       className="absolute top-3 right-3 px-3 py-1.5 bg-black/70 hover:bg-black/90 text-white rounded-lg text-xs font-medium backdrop-blur-md transition-colors flex items-center gap-1.5 shadow cursor-pointer"
                     >
-                      <Camera className="w-3.5 h-3.5" />
+                      {compressingEditCatImage ? (
+                        <Loader2 className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                      ) : (
+                        <Camera className="w-3.5 h-3.5" />
+                      )}
                       <span>{compressingEditCatImage ? 'Processing...' : editingCategory.imageUrl ? 'Change Photo' : 'Upload Photo'}</span>
-                    </button>
+                    </label>
+                    <input 
+                      id="edit-cat-modal-file-input"
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleEditCatImageSelect} 
+                      className="hidden" 
+                      disabled={compressingEditCatImage}
+                    />
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -2616,6 +2653,23 @@ export default function BranchManager() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Success Toast */}
+      <AnimatePresence>
+        {successToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-6 right-6 z-50 bg-neutral-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center gap-2.5 text-sm font-semibold border border-neutral-800"
+          >
+            <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+              <Check className="w-3.5 h-3.5" />
+            </div>
+            <span>{successToast}</span>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

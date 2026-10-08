@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import sharp from 'sharp';
 import { kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from './src/data';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -149,6 +150,33 @@ async function startServer() {
       version: data.version,
       lastUpdated: data.lastUpdated
     });
+  });
+
+  // High-performance image compression endpoint using sharp (ideal for mobile / high-res uploads)
+  app.post('/api/compress-image', async (req: Request, res: Response) => {
+    try {
+      const { image, maxWidth = 480, maxHeight = 320, quality = 65 } = req.body;
+      if (!image || typeof image !== 'string') {
+        res.status(400).json({ error: 'Image data URL is required' });
+        return;
+      }
+      const matches = image.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+      if (!matches || matches.length !== 3) {
+        res.status(400).json({ error: 'Invalid base64 data URL' });
+        return;
+      }
+      const inputBuffer = Buffer.from(matches[2], 'base64');
+      const compressedBuffer = await sharp(inputBuffer)
+        .resize({ width: Math.min(Number(maxWidth), 800), height: Math.min(Number(maxHeight), 600), fit: 'cover', withoutEnlargement: true })
+        .webp({ quality: Number(quality) || 65, effort: 5 })
+        .toBuffer();
+
+      const compressedDataUrl = 'data:image/webp;base64,' + compressedBuffer.toString('base64');
+      res.json({ success: true, compressed: compressedDataUrl, bytes: compressedBuffer.length });
+    } catch (err: any) {
+      console.error('Server image compression failed:', err);
+      res.status(500).json({ error: err.message || 'Image compression failed' });
+    }
   });
 
   // Add or update single item
