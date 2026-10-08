@@ -109,7 +109,7 @@ function saveBranchData(data: BranchStoreData): void {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = 3000;
 
   // Middleware for large payload images (base64 image uploads)
   app.use(express.json({ limit: '60mb' }));
