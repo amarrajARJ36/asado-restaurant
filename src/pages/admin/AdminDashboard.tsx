@@ -12,7 +12,6 @@ import {
   CheckCircle2,
   Clock
 } from 'lucide-react';
-import MaintenanceControlPanel from '../../components/MaintenanceControlPanel';
 
 export default function AdminDashboard() {
   return (
@@ -29,7 +28,7 @@ export default function AdminDashboard() {
               Welcome Back, Admin
             </h1>
             <p className="text-neutral-500 text-sm mt-1 max-w-2xl">
-              Select an individual branch below to update its menu dishes, categories, promotional banners, and gallery media, or use the deployment pause switch below to temporarily close public access.
+              Select an individual branch below to update its menu dishes, categories, promotional banners, and gallery media.
             </p>
           </div>
           
@@ -45,11 +44,6 @@ export default function AdminDashboard() {
             </Link>
           </div>
         </div>
-      </div>
-
-      {/* Website & Deployment Pause / Maintenance Switch */}
-      <div className="mb-8">
-        <MaintenanceControlPanel />
       </div>
 
       {/* Branches List */}

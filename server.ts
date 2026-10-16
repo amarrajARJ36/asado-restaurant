@@ -22,59 +22,6 @@ interface BranchStoreData {
   categories: any[];
 }
 
-interface MaintenanceSettings {
-  isPaused: boolean;
-  pauseTitle: string;
-  pauseMessage: string;
-  expectedBack: string;
-  contactPhone: string;
-  contactEmail: string;
-  pausedBranches: string[];
-  updatedAt: number;
-  updatedBy: string;
-}
-
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-
-function loadMaintenanceSettings(): MaintenanceSettings {
-  const defaultSettings: MaintenanceSettings = {
-    isPaused: false,
-    pauseTitle: 'Temporarily Paused for Maintenance',
-    pauseMessage: 'We are currently updating ASADO Cafe to bring you an even better dining experience. We look forward to welcoming you back shortly!',
-    expectedBack: 'Check back soon',
-    contactPhone: '+91 95625 36000',
-    contactEmail: 'info@asadocafe.com',
-    pausedBranches: [],
-    updatedAt: Date.now(),
-    updatedBy: 'Admin'
-  };
-
-  if (fs.existsSync(SETTINGS_FILE)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
-      if (data && typeof data.isPaused === 'boolean') {
-        return {
-          ...defaultSettings,
-          ...data,
-          pausedBranches: Array.isArray(data.pausedBranches) ? data.pausedBranches : []
-        };
-      }
-    } catch (e) {
-      console.error('Error loading maintenance settings:', e);
-    }
-  }
-
-  return defaultSettings;
-}
-
-function saveMaintenanceSettings(settings: MaintenanceSettings): void {
-  try {
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf-8');
-  } catch (e) {
-    console.error('Error saving maintenance settings:', e);
-  }
-}
-
 const memoryStore: Record<string, BranchStoreData> = {};
 
 function getBranchFilePath(slug: string): string {
@@ -229,32 +176,6 @@ async function startServer() {
     } catch (err: any) {
       console.error('Server image compression failed:', err);
       res.status(500).json({ error: err.message || 'Image compression failed' });
-    }
-  });
-
-  // Maintenance & Pause Mode Settings
-  app.get('/api/settings/maintenance', (req: Request, res: Response) => {
-    try {
-      const settings = loadMaintenanceSettings();
-      res.json({ success: true, settings });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to read maintenance settings' });
-    }
-  });
-
-  app.post('/api/settings/maintenance', (req: Request, res: Response) => {
-    try {
-      const incoming = req.body;
-      const current = loadMaintenanceSettings();
-      const updated: MaintenanceSettings = {
-        ...current,
-        ...incoming,
-        updatedAt: Date.now()
-      };
-      saveMaintenanceSettings(updated);
-      res.json({ success: true, settings: updated });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message || 'Failed to save maintenance settings' });
     }
   });
 

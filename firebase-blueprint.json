@@ -68,22 +68,6 @@
         "branchSlug": { "type": "string", "maxLength": 50 }
       },
       "required": ["name", "branchSlug"]
-    },
-    "SiteSettings": {
-      "title": "Site Settings",
-      "description": "Global website settings including maintenance and pause mode",
-      "type": "object",
-      "properties": {
-        "isPaused": { "type": "boolean" },
-        "pauseTitle": { "type": "string", "maxLength": 200 },
-        "pauseMessage": { "type": "string", "maxLength": 1000 },
-        "expectedBack": { "type": "string", "maxLength": 100 },
-        "contactPhone": { "type": "string", "maxLength": 50 },
-        "contactEmail": { "type": "string", "maxLength": 100 },
-        "pausedBranches": { "type": "string", "maxLength": 500 },
-        "updatedAt": { "type": "number" },
-        "updatedBy": { "type": "string", "maxLength": 100 }
-      }
     }
   },
   "firestore": {
@@ -102,10 +86,6 @@
     "categories/{categoryId}": {
       "schema": { "$ref": "#/entities/Category" },
       "description": "Menu categories collection"
-    },
-    "settings/{settingId}": {
-      "schema": { "$ref": "#/entities/SiteSettings" },
-      "description": "System and site settings collection"
     }
   }
 }

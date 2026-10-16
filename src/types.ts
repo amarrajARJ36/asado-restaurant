@@ -36,16 +36,3 @@ export interface FoodItem {
   isPurged?: boolean;
   deletedAt?: number | null;
 }
-
-export interface MaintenanceSettings {
-  isPaused: boolean;
-  pauseTitle: string;
-  pauseMessage: string;
-  expectedBack?: string;
-  contactPhone?: string;
-  contactEmail?: string;
-  pausedBranches?: string[];
-  updatedAt?: number;
-  updatedBy?: string;
-}
-

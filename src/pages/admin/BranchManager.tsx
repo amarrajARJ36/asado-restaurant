@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useParams, Link } from 'react-router-dom';
 import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategories } from '../../data';
 import { useState, useEffect, useRef } from 'react';
-import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List, Loader2, PauseCircle, Play } from 'lucide-react';
+import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -13,14 +13,11 @@ import { useBanners, Banner } from '../../hooks/useBanners';
 import { resolveItemCategory, normalizeMenuItems } from '../../lib/categoryUtils';
 import { getLocalDeletedIds, setLocalDeletedId, getLocalPurgedIds, setLocalPurgedId } from '../../lib/localMenuStore';
 import { useMenuSync } from '../../lib/menuSync';
-import { useMaintenance } from '../../hooks/useMaintenance';
 
 export default function BranchManager() {
   const { branchId } = useParams();
   const branch = branches.find(b => b.slug === branchId);
   const [activeTab, setActiveTab] = useState('menu');
-  const { isBranchPaused, togglePause } = useMaintenance();
-  const isThisBranchPaused = isBranchPaused(branchId);
   
   // Real-time multi-device sync hook for menu items and categories
   const {
@@ -837,34 +834,6 @@ export default function BranchManager() {
           </div>
         </div>
       </div>
-
-      {/* Maintenance / Pause Banner if paused */}
-      {isThisBranchPaused && (
-        <div className="mb-6 bg-amber-500/15 border border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-2xs">
-          <div className="flex items-center gap-2.5 text-amber-950 font-bold text-xs sm:text-sm">
-            <PauseCircle className="w-5 h-5 text-amber-600 shrink-0" />
-            <span>
-              <strong>PAUSE MODE ACTIVE:</strong> Public visitors cannot access {branch?.name || 'this branch'}'s menu or details. They see the pause notice screen.
-            </span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => togglePause(false)}
-              className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-extrabold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>Resume Website</span>
-            </button>
-            <Link
-              to="/admin"
-              className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-50 text-neutral-700 font-bold text-xs border border-neutral-200 shadow-2xs transition-colors"
-            >
-              Pause Settings
-            </Link>
-          </div>
-        </div>
-      )}
 
       {/* Horizontal Branch Tab Navigation Bar */}
       <div className="flex items-center gap-2 overflow-x-auto pb-2 mb-6 scrollbar-none border-b border-neutral-200">

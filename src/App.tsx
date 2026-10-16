@@ -21,17 +21,16 @@ import VarkalaHome from './pages/varkala/VarkalaHome';
 import AdminLayout from './pages/admin/AdminLayout';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import BranchManager from './pages/admin/BranchManager';
-import MaintenanceGuard from './components/MaintenanceGuard';
 
 export default function App() {
   return (
     <BrowserRouter>
       <ScrollToTop />
       <Routes>
-        <Route path="/" element={<MaintenanceGuard><MainHome /></MaintenanceGuard>} />
+        <Route path="/" element={<MainHome />} />
         
         {/* Kollam Branch */}
-        <Route path="/kollam" element={<MaintenanceGuard branchSlug="kollam"><BranchLayout branchSlug="kollam" /></MaintenanceGuard>}>
+        <Route path="/kollam" element={<BranchLayout branchSlug="kollam" />}>
           <Route index element={<KollamHome />} />
           <Route path="menu" element={<KollamMenu />} />
           <Route path="cruise" element={<KollamCruise />} />
@@ -46,13 +45,13 @@ export default function App() {
         </Route>
 
         {/* Alappuzha Branch */}
-        <Route path="/alappuzha" element={<MaintenanceGuard branchSlug="alappuzha"><BranchLayout branchSlug="alappuzha" /></MaintenanceGuard>}>
+        <Route path="/alappuzha" element={<BranchLayout branchSlug="alappuzha" />}>
           <Route index element={<AlappuzhaHome />} />
           <Route path="menu" element={<AlappuzhaMenu />} />
         </Route>
 
         {/* Varkala Branch */}
-        <Route path="/varkala" element={<MaintenanceGuard branchSlug="varkala"><VarkalaHome /></MaintenanceGuard>} />
+        <Route path="/varkala" element={<VarkalaHome />} />
 
         {/* Admin Dashboard */}
         <Route path="/admin" element={<AdminLayout />}>
