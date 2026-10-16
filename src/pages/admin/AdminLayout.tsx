@@ -12,12 +12,16 @@ import {
   X, 
   ExternalLink, 
   Check, 
-  UtensilsCrossed
+  UtensilsCrossed,
+  PauseCircle,
+  PlayCircle
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import FooterCopyright from '../../components/FooterCopyright';
+import { useMaintenance } from '../../hooks/useMaintenance';
 
 export default function AdminLayout() {
+  const { isPaused, togglePause } = useMaintenance();
   const location = useLocation();
   const navigate = useNavigate();
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
@@ -189,6 +193,28 @@ export default function AdminLayout() {
 
             {/* Right Side Actions */}
             <div className="flex items-center gap-3">
+              {/* Site Status & Quick Toggle */}
+              {isPaused ? (
+                <button
+                  type="button"
+                  onClick={() => togglePause(false)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-amber-500 hover:bg-amber-400 text-neutral-950 border border-amber-600 shadow-xs cursor-pointer animate-pulse transition-all"
+                  title="Click to resume deployment and website access"
+                >
+                  <PauseCircle className="w-3.5 h-3.5" />
+                  <span>Site Paused (Resume)</span>
+                </button>
+              ) : (
+                <Link
+                  to="/admin"
+                  className="hidden md:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"
+                  title="Site is currently live to customers"
+                >
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>Live to Public</span>
+                </Link>
+              )}
+
               {/* Preview Live Site */}
               <Link 
                 to={currentBranch ? `/${currentBranch.slug}` : "/"} 
