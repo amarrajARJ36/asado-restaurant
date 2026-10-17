@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { supabase } from '../../lib/supabase';
 import { kollamGallery as staticKollamGallery } from '../../data';
 import { getResolvedGalleryImages, initBranchSync } from '../../lib/localMenuStore';
 import { syncService } from '../../lib/syncService';
@@ -36,18 +35,36 @@ export default function KollamGallery() {
     };
     window.addEventListener('asado-sync-update', handleCustomSyncEvent);
 
-    const q = query(collection(db, 'galleryImages'), where('branchSlug', '==', 'kollam'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      latestDbImages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const fetchGallery = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('gallery_images')
+          .select('*')
+          .eq('branch_slug', 'kollam');
+        if (!error && Array.isArray(data)) {
+          latestDbImages = data.map(d => ({ id: d.id, url: d.url, category: d.category, branchSlug: d.branch_slug }));
+        }
+      } catch (e) {
+        console.warn('Gallery fetch warning:', e);
+      }
       refreshGallery();
-    }, (error) => {
-      console.warn('Firestore gallery snapshot warning:', error);
-      // Fallback still keeps resolved static + local gallery!
-      refreshGallery();
-    });
+    };
+
+    fetchGallery();
+
+    const channel = supabase
+      .channel('kollam_gallery_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'gallery_images', filter: 'branch_slug=eq.kollam' },
+        () => {
+          fetchGallery();
+        }
+      )
+      .subscribe();
 
     return () => {
-      unsubscribe();
+      supabase.removeChannel(channel);
       unsubSync();
       window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
     };

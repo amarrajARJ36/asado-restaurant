@@ -5,8 +5,7 @@ import {
   MapPin, Phone, MessageCircle, Clock, Anchor, Ship, GlassWater, PartyPopper, Users, Heart, CheckCircle2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { supabase } from '../../lib/supabase';
 import { useBanners } from '../../hooks/useBanners';
 import { alappuzhaGallery as staticAlappuzhaGallery } from '../../data';
 import { getResolvedGalleryImages, initBranchSync } from '../../lib/localMenuStore';
@@ -107,17 +106,36 @@ export default function AlappuzhaHome() {
     };
     window.addEventListener('asado-sync-update', handleCustomSyncEvent);
 
-    const q = query(collection(db, 'galleryImages'), where('branchSlug', '==', 'alappuzha'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      latestDbImages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const fetchGallery = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('gallery_images')
+          .select('*')
+          .eq('branch_slug', 'alappuzha');
+        if (!error && Array.isArray(data)) {
+          latestDbImages = data.map(d => ({ id: d.id, url: d.url, category: d.category, branchSlug: d.branch_slug }));
+        }
+      } catch (e) {
+        console.warn('Gallery fetch warning in Alappuzha:', e);
+      }
       refreshGallery();
-    }, (error) => {
-      console.warn('Firestore gallery snapshot warning in Alappuzha:', error);
-      refreshGallery();
-    });
+    };
+
+    fetchGallery();
+
+    const channel = supabase
+      .channel('alappuzha_gallery_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'gallery_images', filter: 'branch_slug=eq.alappuzha' },
+        () => {
+          fetchGallery();
+        }
+      )
+      .subscribe();
 
     return () => {
-      unsubscribe();
+      supabase.removeChannel(channel);
       unsubSync();
       window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
     };

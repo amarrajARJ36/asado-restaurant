@@ -2,7 +2,7 @@
  * Compresses an image file in the browser using HTML5 Canvas.
  * Returns a base64 Data URL (WebP or JPEG).
  * Produces crisp, optimized images perfectly suited
- * for fast loading and direct storage in Firestore documents.
+ * for fast loading and optimal bandwidth.
  */
 export async function compressImage(
   file: File,
@@ -90,7 +90,6 @@ export async function compressImage(
 /**
  * Compresses category background photo specifically tailored for category cards.
  * Produces crisp, beautiful WebP images around 14KB - 22KB (max 25KB guaranteed).
- * Ensures a branch can have 30+ category photos without ever exceeding Firestore's 1MB limit.
  */
 export async function compressCategoryPhoto(file: File): Promise<string> {
   // Allow all image MIME types and image extensions

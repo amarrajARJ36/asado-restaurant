@@ -4,15 +4,13 @@ import { branches, kollamMenu, alappuzhaMenu, kollamCategories, alappuzhaCategor
 import { useState, useEffect, useRef } from 'react';
 import { Image, Utensils, Tag, Store, Plus, Trash2, Camera, Upload, Flame, Edit3, X, ArrowUp, ArrowDown, Eye, EyeOff, Check, Filter, Sparkles, ExternalLink, Search, ChevronDown, ChevronUp, ChevronRight, Layers, List, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, query, where, writeBatch } from 'firebase/firestore';
-import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
-import { compressImage, compressCategoryPhoto, recompressDataUrl } from '../../lib/imageCompressor';
 import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
 import { useBanners, Banner } from '../../hooks/useBanners';
 import { resolveItemCategory, normalizeMenuItems } from '../../lib/categoryUtils';
 import { useMenuSync } from '../../lib/menuSync';
-import { uploadImageToSupabase } from '../../lib/supabase';
+import { supabase, uploadImageToSupabase } from '../../lib/supabase';
+import { recompressDataUrl } from '../../lib/imageCompressor';
 
 export default function BranchManager() {
   const { branchId } = useParams();
@@ -136,18 +134,43 @@ export default function BranchManager() {
 
   useEffect(() => {
     if (!branchId) return;
-    const q = query(collection(db, 'galleryImages'), where('branchSlug', '==', branchId));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const images = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setGalleryImages(images.sort((a: any, b: any) => b.createdAt - a.createdAt));
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'galleryImages');
-    });
+    const fetchGallery = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('gallery_images')
+          .select('*')
+          .eq('branch_slug', branchId)
+          .order('created_at', { ascending: false });
+        if (!error && Array.isArray(data)) {
+          setGalleryImages(data.map(d => ({
+            id: d.id,
+            url: d.url,
+            category: d.category,
+            branchSlug: d.branch_slug,
+            createdAt: new Date(d.created_at).getTime()
+          })));
+        }
+      } catch (e) {
+        console.warn('Gallery fetch error:', e);
+      }
+    };
 
-    return () => { unsubscribe(); };
+    fetchGallery();
+    const channel = supabase
+      .channel(`gallery_admin_${branchId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'gallery_images', filter: `branch_slug=eq.${branchId}` },
+        () => fetchGallery()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [branchId]);
 
-  // Auto-optimize legacy oversized category photos to save Firestore & localStorage bandwidth
+  // Auto-optimize legacy oversized category photos to save bandwidth
   const optimizedCategoriesRef = useRef(false);
   useEffect(() => {
     if (optimizedCategoriesRef.current || !categories || categories.length === 0 || !branchId) return;
@@ -180,7 +203,7 @@ export default function BranchManager() {
 
   // Sync banner state for this branch
   useEffect(() => {
-    if (bannersLoading) return; // Wait until Firestore snapshot finishes loading
+    if (bannersLoading) return; // Wait until Supabase query finishes loading
 
     if (targetBanner) {
       setBannerTitle(targetBanner.title || '');
@@ -217,22 +240,22 @@ export default function BranchManager() {
     const id = targetBanner?.id || `banner-${branchId}`;
 
     try {
-      await setDoc(doc(db, 'banners', id), {
+      await supabase.from('banners').upsert({
         id,
+        branch_slug: branchId,
         title: bannerTitle.trim(),
-        subtitle: bannerSubtitle.trim(),
-        tagText: bannerTagText.trim(),
-        branchSlug: branchId,
-        isActive: bannerIsActive,
-        updatedAt: Date.now(),
-        ...themeConfig
-      }, { merge: true });
+        tag_text: bannerTagText.trim(),
+        bg_color: themeConfig.bgColor,
+        text_color: themeConfig.textColor,
+        tag_bg: themeConfig.tagBg,
+        tag_color: themeConfig.tagColor,
+        active: bannerIsActive
+      });
 
       setBannerSavedNotice(true);
       setTimeout(() => setBannerSavedNotice(false), 4000);
     } catch (err: any) {
       console.error("Failed to save banner:", err);
-      handleFirestoreError(err, OperationType.UPDATE, `banners/${id}`);
       alert("Error saving banner: " + (err?.message || "Unknown error"));
     } finally {
       setIsSavingBanner(false);
@@ -253,22 +276,22 @@ export default function BranchManager() {
       : { bgColor: 'bg-amber-50', textColor: 'text-amber-950', tagBg: 'bg-amber-200', tagColor: 'text-amber-900' };
 
     try {
-      await setDoc(doc(db, 'banners', id), {
+      await supabase.from('banners').upsert({
         id,
+        branch_slug: branchId,
         title: bannerTitle.trim() || (branch?.slug === 'kollam' ? "See Live FIFA 2026 Matches (Everyday)" : "Live Music Every Saturday"),
-        subtitle: bannerSubtitle.trim() || "Promotional specials and lakeside dining.",
-        tagText: bannerTagText.trim() || "Special Event",
-        branchSlug: branchId,
-        isActive: nextState,
-        updatedAt: Date.now(),
-        ...themeConfig
-      }, { merge: true });
+        tag_text: bannerTagText.trim() || "Special Event",
+        bg_color: themeConfig.bgColor,
+        text_color: themeConfig.textColor,
+        tag_bg: themeConfig.tagBg,
+        tag_color: themeConfig.tagColor,
+        active: nextState
+      });
 
       setBannerSavedNotice(true);
       setTimeout(() => setBannerSavedNotice(false), 4000);
     } catch (err: any) {
       console.error("Error toggling banner", err);
-      handleFirestoreError(err, OperationType.UPDATE, `banners/${id}`);
       alert("Error updating banner: " + (err?.message || "Unknown error"));
     }
   };
@@ -418,25 +441,24 @@ export default function BranchManager() {
   const handleAddImage = async () => {
     if (!newImageUrl) return;
     const id = Date.now().toString();
-    const newImg = {
-      url: newImageUrl,
-      category: newImageCategory,
-      branchSlug: branchId,
-      createdAt: Date.now()
-    };
     try {
-      await setDoc(doc(db, 'galleryImages', id), newImg);
+      await supabase.from('gallery_images').insert({
+        id,
+        url: newImageUrl,
+        category: newImageCategory,
+        branch_slug: branchId
+      });
       setNewImageUrl('');
     } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `galleryImages/${id}`);
+      console.error('Gallery image save error:', error);
     }
   };
 
   const handleRemoveImage = async (id: string) => {
     try {
-      await deleteDoc(doc(db, 'galleryImages', id));
+      await supabase.from('gallery_images').delete().eq('id', id);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `galleryImages/${id}`);
+      console.error('Gallery image delete error:', error);
     }
   };
 
@@ -771,23 +793,28 @@ export default function BranchManager() {
     setUploading(true);
     try {
       if (file.type.startsWith('video/')) {
-        alert("Video files cannot be stored directly in free database documents due to size constraints. You can paste any direct video URL (e.g. from YouTube, Supabase Storage, or Cloudinary) into the URL box!");
+        alert("Video files cannot be stored directly. You can paste any direct video URL (e.g. from YouTube or Supabase Storage) into the URL box!");
         return;
       }
 
-      // In-browser compression: scale & compress image client-side to ~60-100KB WebP
-      const compressedDataUrl = await compressImage(file, { maxWidth: 1200, maxHeight: 1200, quality: 0.78 });
-
-      // Immediately add to gallery in Firestore - 100% free on Spark plan!
+      // Upload directly to Supabase Storage bucket 'restaurant-assets'
       const id = Date.now().toString();
-      const newImg = {
-        url: compressedDataUrl,
+      const publicUrl = await uploadImageToSupabase(file, 'gallery', id);
+
+      // Save record in Supabase gallery_images table
+      const { error } = await supabase.from('gallery_images').insert({
+        id,
+        url: publicUrl,
         category: newImageCategory,
-        branchSlug: branchId,
-        createdAt: Date.now()
-      };
-      await setDoc(doc(db, 'galleryImages', id), newImg);
-      setNewImageUrl('');
+        branch_slug: branchId
+      });
+
+      if (error) {
+        console.error("Error inserting gallery image:", error);
+        alert("Failed to save gallery image: " + error.message);
+      } else {
+        setNewImageUrl('');
+      }
     } catch (error: any) {
       console.error("Error uploading file:", error);
       alert("Failed to process image: " + (error?.message || "Unknown error"));

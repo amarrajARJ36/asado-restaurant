@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, updateDoc, getDocs } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { supabase } from '../lib/supabase';
 import { syncService } from '../lib/syncService';
 
 export interface Banner {
   id: string;
   title: string;
-  subtitle: string;
+  subtitle?: string;
   tagText: string;
   bgColor?: string;
   textColor?: string;
@@ -71,72 +70,66 @@ function saveStoredBanners(banners: Banner[]): void {
   }
 }
 
-let hasAttemptedSeed = false;
+function rowToBanner(r: any): Banner {
+  return {
+    id: r.id,
+    branchSlug: r.branch_slug || 'all',
+    title: r.title || '',
+    subtitle: '',
+    tagText: r.tag_text || "Today's Special",
+    bgColor: r.bg_color || 'bg-amber-50',
+    textColor: r.text_color || 'text-amber-950',
+    tagBg: r.tag_bg || 'bg-amber-200',
+    tagColor: r.tag_color || 'text-amber-900',
+    isActive: r.active !== false,
+    createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
+  };
+}
 
 export function useBanners(branchSlug?: string, options?: { includeInactive?: boolean }) {
   const [allBanners, setAllBanners] = useState<Banner[]>(getStoredBanners);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check if initial seeding is required once
-    async function checkSeed() {
-      if (hasAttemptedSeed) return;
-      hasAttemptedSeed = true;
+    // Fetch from Supabase
+    const fetchBanners = async () => {
       try {
-        const seededMarker = localStorage.getItem('asado_banners_seeded_v1');
-        if (!seededMarker) {
-          const snap = await getDocs(collection(db, 'banners'));
-          if (snap.empty) {
-            localStorage.setItem('asado_banners_seeded_v1', 'true');
-            for (const b of starterBanners) {
-              await setDoc(doc(db, 'banners', b.id), b);
-            }
-          }
+        const { data, error } = await supabase
+          .from('banners')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.warn('Supabase banners query warning:', error.message);
+          return;
+        }
+
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped = data.map(rowToBanner);
+          setAllBanners(mapped);
+          saveStoredBanners(mapped);
         }
       } catch (err) {
-        console.warn('Banner check seed warning:', err);
-      }
-    }
-    checkSeed();
-
-    // Sync from central server
-    const fetchServerBanners = async () => {
-      try {
-        const res = await fetch('/api/sync/state');
-        if (res.ok) {
-          const json = await res.json();
-          if (Array.isArray(json?.banners) && json.banners.length > 0) {
-            setAllBanners(json.banners);
-            saveStoredBanners(json.banners);
-          }
-        }
-      } catch {
-        // ignore
+        console.warn('Error fetching banners:', err);
       }
     };
-    fetchServerBanners();
 
-    const unsubSync = syncService.subscribe(() => {
-      fetchServerBanners();
-    });
+    fetchBanners();
 
-    const unsubscribe = onSnapshot(collection(db, 'banners'), (snapshot) => {
-      const fbBanners = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Banner));
-      // Sort newest first
-      fbBanners.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-      const finalBanners = fbBanners.length > 0 ? fbBanners : getStoredBanners();
-      saveStoredBanners(finalBanners);
-      setAllBanners(finalBanners);
-      setLoading(false);
-    }, (error) => {
-      console.warn('Firestore banners snapshot warning:', error);
-      setAllBanners(getStoredBanners());
-      setLoading(false);
-    });
+    // Subscribe to real-time banner changes
+    const channel = supabase
+      .channel('banners_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'banners' },
+        () => {
+          fetchBanners();
+        }
+      )
+      .subscribe();
 
     return () => {
-      unsubscribe();
-      unsubSync();
+      supabase.removeChannel(channel);
     };
   }, []);
 
@@ -144,22 +137,18 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
   let filtered: Banner[] = [];
 
   if (branchSlug) {
-    // Look for banners specifically configured for this branch
     const branchSpecific = allBanners.filter(b => b.branchSlug === branchSlug || b.id === `banner-${branchSlug}`);
     if (branchSpecific.length > 0) {
-      // If branch has its own banner configured, that is authoritative for this branch!
       filtered = options?.includeInactive 
         ? branchSpecific 
         : branchSpecific.filter(b => b.isActive !== false);
     } else {
-      // Fallback to global banners only if no branch-specific banner exists
       const globalBanners = allBanners.filter(b => !b.branchSlug || b.branchSlug === 'all');
       filtered = options?.includeInactive 
         ? globalBanners 
         : globalBanners.filter(b => b.isActive !== false);
     }
   } else {
-    // No branchSlug specified (admin dashboard overview)
     if (!options?.includeInactive) {
       filtered = allBanners.filter(b => b.isActive !== false);
     } else {
@@ -182,16 +171,29 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
       isActive: banner.isActive !== undefined ? banner.isActive : true,
       createdAt: banner.createdAt || Date.now(),
     };
+
     setAllBanners(prev => {
       const next = [newBanner, ...prev.filter(b => b.id !== id)];
       saveStoredBanners(next);
       return next;
     });
+
     syncService.sendUpdate(newBanner.branchSlug || 'all', 'banner', newBanner);
+
     try {
-      await setDoc(doc(db, 'banners', id), newBanner, { merge: true });
+      await supabase.from('banners').upsert({
+        id,
+        branch_slug: newBanner.branchSlug,
+        title: newBanner.title,
+        tag_text: newBanner.tagText,
+        bg_color: newBanner.bgColor,
+        text_color: newBanner.textColor,
+        tag_bg: newBanner.tagBg,
+        tag_color: newBanner.tagColor,
+        active: newBanner.isActive !== false
+      });
     } catch (error) {
-      console.warn('Firestore banner create warning:', error);
+      console.warn('Supabase banner create error:', error);
     }
     return id;
   };
@@ -209,36 +211,42 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
       saveStoredBanners(next);
       return next;
     });
+
     if (updatedBanner) {
       syncService.sendUpdate((updatedBanner as Banner).branchSlug || 'all', 'banner', updatedBanner);
     }
+
     try {
-      await setDoc(doc(db, 'banners', id), updates, { merge: true });
+      const rowUpdates: any = {};
+      if (updates.title !== undefined) rowUpdates.title = updates.title;
+      if (updates.tagText !== undefined) rowUpdates.tag_text = updates.tagText;
+      if (updates.bgColor !== undefined) rowUpdates.bg_color = updates.bgColor;
+      if (updates.textColor !== undefined) rowUpdates.text_color = updates.textColor;
+      if (updates.tagBg !== undefined) rowUpdates.tag_bg = updates.tagBg;
+      if (updates.tagColor !== undefined) rowUpdates.tag_color = updates.tagColor;
+      if (updates.isActive !== undefined) rowUpdates.active = updates.isActive;
+      if (updates.branchSlug !== undefined) rowUpdates.branch_slug = updates.branchSlug;
+
+      await supabase.from('banners').update(rowUpdates).eq('id', id);
     } catch (error) {
-      console.warn('Firestore banner update warning:', error);
+      console.warn('Supabase banner update error:', error);
     }
   };
 
   const toggleBanner = async (id: string, newActiveState: boolean) => {
-    let toggledBanner: Banner | null = null;
     setAllBanners(prev => {
       const next = prev.map(b => {
-        if (b.id === id) {
-          toggledBanner = { ...b, isActive: newActiveState };
-          return toggledBanner;
-        }
+        if (b.id === id) return { ...b, isActive: newActiveState };
         return b;
       });
       saveStoredBanners(next);
       return next;
     });
-    if (toggledBanner) {
-      syncService.sendUpdate((toggledBanner as Banner).branchSlug || 'all', 'banner', toggledBanner);
-    }
+
     try {
-      await setDoc(doc(db, 'banners', id), { isActive: newActiveState }, { merge: true });
+      await supabase.from('banners').update({ active: newActiveState }).eq('id', id);
     } catch (error) {
-      console.warn('Firestore banner toggle warning:', error);
+      console.warn('Supabase banner toggle error:', error);
     }
   };
 
@@ -248,10 +256,11 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
       saveStoredBanners(next);
       return next;
     });
+
     try {
-      await deleteDoc(doc(db, 'banners', id));
+      await supabase.from('banners').delete().eq('id', id);
     } catch (error) {
-      console.warn('Firestore banner delete warning:', error);
+      console.warn('Supabase banner delete error:', error);
     }
   };
 

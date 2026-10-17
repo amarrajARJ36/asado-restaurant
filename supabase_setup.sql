@@ -58,11 +58,21 @@ CREATE TABLE IF NOT EXISTS public.banners (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 4b. Create Gallery Images Table
+CREATE TABLE IF NOT EXISTS public.gallery_images (
+    id TEXT PRIMARY KEY,
+    branch_slug TEXT NOT NULL,
+    category TEXT NOT NULL,
+    url TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 5. Enable Row Level Security (RLS)
 ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.menu_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.banners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.gallery_images ENABLE ROW LEVEL SECURITY;
 
 -- 6. Create Open Public Access Policies (Allow read/write for site & admin panel)
 DROP POLICY IF EXISTS "Public access branches" ON public.branches;
@@ -76,6 +86,9 @@ CREATE POLICY "Public access menu_items" ON public.menu_items FOR ALL USING (tru
 
 DROP POLICY IF EXISTS "Public access banners" ON public.banners;
 CREATE POLICY "Public access banners" ON public.banners FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public access gallery_images" ON public.gallery_images;
+CREATE POLICY "Public access gallery_images" ON public.gallery_images FOR ALL USING (true) WITH CHECK (true);
 
 -- 7. Create Storage Bucket for Menu & Category Images
 INSERT INTO storage.buckets (id, name, public)

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://uxqynrtqxcrfdklwydhl.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4cXlucnRxeGNyZmRrbHd5ZGhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjI1MzQsImV4cCI6MjEwNzc5ODUzNH0.qr4ls3aNkRtAMHDcqOyvrRS6IghBWwnjxuHHZReBy-g';
+const SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || 'https://uxqynrtqxcrfdklwydhl.supabase.co';
+const SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV4cXlucnRxeGNyZmRrbHd5ZGhsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyMjI1MzQsImV4cCI6MjEwNzc5ODUzNH0.qr4ls3aNkRtAMHDcqOyvrRS6IghBWwnjxuHHZReBy-g';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
@@ -15,7 +15,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
  */
 export async function uploadImageToSupabase(
   file: File,
-  folder: 'dishes' | 'categories' | 'banners' = 'dishes',
+  folder: 'dishes' | 'categories' | 'banners' | 'gallery' = 'dishes',
   customId?: string
 ): Promise<string> {
   const fileExt = file.name.split('.').pop()?.toLowerCase() || 'webp';

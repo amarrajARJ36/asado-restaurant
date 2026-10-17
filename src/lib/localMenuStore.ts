@@ -7,7 +7,7 @@ import { syncService } from './syncService';
  * 1. 100% synchronization across multiple phones, laptops, and guest pages via central sync server.
  * 2. Real-time broadcast so edits on Phone 1 reflect immediately on Phone 2 and guest menu.
  * 3. Zero lag & zero image flash on Kollam / Alappuzha menu cards by caching uploaded category images.
- * 4. Offline resilience with localStorage fallback when network is slow or Firestore hits quota limits.
+ * 4. Offline resilience with localStorage fallback when network is slow or database is unreachable.
  */
 
 // Auto-hydrate from injected server state if available (ensures frame-1 sync across all devices)
@@ -523,7 +523,7 @@ export function removeLocalGalleryImage(branchSlug: string, imageId: string): vo
 export function getResolvedGalleryImages(
   branchSlug: string,
   staticGallery: any[] = [],
-  firestoreImages: any[] = []
+  remoteImages: any[] = []
 ): any[] {
   const localGallery = getLocalGalleryImages(branchSlug);
   const deletedSet = new Set<string>();
@@ -547,8 +547,8 @@ export function getResolvedGalleryImages(
   staticGallery.forEach(img => {
     if (img && img.id && !deletedSet.has(img.id)) map.set(img.id, img);
   });
-  // 2. Firestore images
-  firestoreImages.forEach(img => {
+  // 2. Database remote images
+  remoteImages.forEach(img => {
     if (img && img.id && !deletedSet.has(img.id)) map.set(img.id, { ...(map.get(img.id) || {}), ...img });
   });
   // 3. Local & synced images
@@ -580,21 +580,21 @@ export async function initBranchSync(branchSlug: string, onUpdate?: () => void):
  * ------------------------------------------------------------- */
 
 /**
- * Resolves menu items by blending static base items, Firestore real-time items,
+ * Resolves menu items by blending static base items, remote real-time items,
  * local storage edits, local custom items, and deleted/purged tracking.
  */
 export function getResolvedMenuItems(
   branchSlug: string,
   staticItems: any[],
   categories: any[],
-  firestoreItems: any[] = []
+  remoteItems: any[] = []
 ): { active: any[]; deleted: any[] } {
   const localDeleted = getLocalDeletedIds(branchSlug);
   const localPurged = getLocalPurgedIds(branchSlug);
   const localEdits = getLocalEditedItems(branchSlug);
   const localCustom = getLocalCustomItems(branchSlug);
 
-  const dbItemMap = new Map(firestoreItems.map((item: any) => [item.id, item]));
+  const dbItemMap = new Map(remoteItems.map((item: any) => [item.id, item]));
 
   // 1. Resolve static base dishes
   const mergedStatic = staticItems.map((staticItem: any) => {
@@ -633,7 +633,7 @@ export function getResolvedMenuItems(
   const existingStaticIds = new Set(staticItems.map((i: any) => i.id));
   const customItemsMap = new Map<string, any>();
 
-  firestoreItems.forEach((item: any) => {
+  remoteItems.forEach((item: any) => {
     if (!existingStaticIds.has(item.id)) {
       customItemsMap.set(item.id, item);
     }
@@ -692,7 +692,7 @@ export function getResolvedMenuItems(
 }
 
 /**
- * Resolves categories by blending static base categories, Firestore categories,
+ * Resolves categories by blending static base categories, remote categories,
  * and local storage additions/edits/deletions.
  * 
  * CRITICAL FIX FOR MENU CARDS BACKGROUND LAG:
@@ -702,15 +702,15 @@ export function getResolvedMenuItems(
 export function getResolvedCategories(
   branchSlug: string,
   staticCategories: any[],
-  firestoreCategories: any[] = []
+  remoteCategories: any[] = []
 ): any[] {
   const localCustomCats = getLocalCustomCategories(branchSlug);
   const localCatEdits = getLocalCategoryEdits(branchSlug);
   const localDeletedCats = getLocalDeletedCategoryIds(branchSlug);
 
-  const dbCatMap = new Map(firestoreCategories.map((c: any) => [c.id, c]));
+  const dbCatMap = new Map(remoteCategories.map((c: any) => [c.id, c]));
 
-  // If firestoreCategories is empty, check if we have persistently cached categories
+  // If remoteCategories is empty, check if we have persistently cached categories
   // which already contain uploaded images from previous visits or server sync
   const cacheKey = `asado_resolved_cats_cache_${branchSlug.toLowerCase()}`;
   let cachedCats: Record<string, any> = {};
@@ -751,7 +751,7 @@ export function getResolvedCategories(
 
   const existingStaticIds = new Set(staticCategories.map((c: any) => c.id));
   const customMap = new Map<string, any>();
-  firestoreCategories.forEach((c: any) => {
+  remoteCategories.forEach((c: any) => {
     if (!existingStaticIds.has(c.id)) customMap.set(c.id, c);
   });
   localCustomCats.forEach((c: any) => {
