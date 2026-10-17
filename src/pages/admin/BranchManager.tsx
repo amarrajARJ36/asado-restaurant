@@ -32,6 +32,7 @@ export default function BranchManager() {
     toggleVeg: syncToggleVeg,
     toggleChefRec: syncToggleChefRec,
     reorderItems: syncReorderItems,
+    reorderCategories: syncReorderCategories,
     saveCategory: syncSaveCategory,
     deleteCategory: syncDeleteCategory
   } = useMenuSync(branchId);
@@ -301,14 +302,23 @@ export default function BranchManager() {
     return normalizeMenuItems(menuItems, categories);
   }, [menuItems, categories]);
 
+  // Categories reliably sorted by their order
+  const sortedCategories = useMemo(() => {
+    return [...categories].sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 9999;
+      const orderB = typeof b.order === 'number' ? b.order : 9999;
+      return orderA - orderB;
+    });
+  }, [categories]);
+
   // Arrange all dishes in a clean category-wise list with real-time search & filter
   const categoryWiseMenu = useMemo(() => {
     let catList: string[] = [];
     if (selectedCategoryFilter !== 'All') {
       catList = [selectedCategoryFilter];
     } else {
-      const knownNames = new Set(categories.map(c => c.name));
-      catList = categories.map(c => c.name);
+      const knownNames = new Set(sortedCategories.map(c => c.name));
+      catList = sortedCategories.map(c => c.name);
       normalizedMenuItems.forEach(item => {
         if (item.category && !knownNames.has(item.category) && !catList.includes(item.category)) {
           catList.push(item.category);
@@ -420,10 +430,64 @@ export default function BranchManager() {
     swapped[curIndex] = swapped[targetIndex];
     swapped[targetIndex] = temp;
 
+    // Collect base orders or create sequence
+    const baseOrders = catItems.map((item, idx) => typeof item.order === 'number' ? item.order : idx);
+    baseOrders.sort((a, b) => a - b);
+
+    // Guarantee distinct strictly ascending numbers
+    for (let i = 1; i < baseOrders.length; i++) {
+      if (baseOrders[i] <= baseOrders[i - 1]) {
+        baseOrders[i] = baseOrders[i - 1] + 1;
+      }
+    }
+
+    const updates = swapped.map((item, idx) => ({
+      id: item.id,
+      order: baseOrders[idx]
+    }));
+
     try {
-      await syncReorderItems(swapped.map((item, index) => ({ id: item.id, order: index, category: catName })));
+      await syncReorderItems(updates);
+      setSuccessToast(`Moved ${itemToMove.name} ${direction}!`);
     } catch (err) {
       console.error("Failed to commit item reorder", err);
+      alert("Failed to save reorder. Please try again.");
+    } finally {
+      setReorderSaving(false);
+    }
+  };
+
+  // Reordering function for categories across the menu
+  const handleMoveCategory = async (catToMove: any, direction: 'up' | 'down') => {
+    if (reorderSaving) return;
+    const sortedCats = [...categories].sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 9999;
+      const orderB = typeof b.order === 'number' ? b.order : 9999;
+      return orderA - orderB;
+    });
+
+    const curIndex = sortedCats.findIndex(c => c.id === catToMove.id);
+    if (curIndex === -1) return;
+    const targetIndex = direction === 'up' ? curIndex - 1 : curIndex + 1;
+    if (targetIndex < 0 || targetIndex >= sortedCats.length) return;
+
+    setReorderSaving(true);
+    const swapped = [...sortedCats];
+    const temp = swapped[curIndex];
+    swapped[curIndex] = swapped[targetIndex];
+    swapped[targetIndex] = temp;
+
+    const updates = swapped.map((c, idx) => ({
+      id: c.id,
+      order: idx
+    }));
+
+    try {
+      await syncReorderCategories(updates);
+      setSuccessToast(`Moved ${catToMove.name} ${direction}!`);
+    } catch (err) {
+      console.error("Failed to commit category reorder", err);
+      alert("Failed to reorder category. Please try again.");
     } finally {
       setReorderSaving(false);
     }
@@ -2053,6 +2117,7 @@ export default function BranchManager() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-neutral-50/90 border-b border-neutral-200 text-xs font-bold uppercase tracking-wider text-neutral-500">
                     <tr>
+                      <th className="px-4 py-3.5 text-center w-28">Order</th>
                       <th className="px-5 py-3.5">Background Photo</th>
                       <th className="px-5 py-3.5">Category Name</th>
                       <th className="px-5 py-3.5">Dishes</th>
@@ -2060,13 +2125,40 @@ export default function BranchManager() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
-                    {categories.map(c => {
+                    {sortedCategories.map((c, catIdx) => {
+                      const isFirst = catIdx === 0;
+                      const isLast = catIdx === sortedCategories.length - 1;
                       const count = menuItems.filter(m => m.category === c.name).length;
                       const hasCustomPhoto = Boolean(c.imageUrl || c.image);
                       const isUploadingThis = uploadingCatId === c.id;
 
                       return (
                         <tr key={c.id} className="hover:bg-neutral-50/70 transition-colors">
+                          <td className="px-3 py-3 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-0.5 bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
+                              <button
+                                type="button"
+                                onClick={() => handleMoveCategory(c, 'up')}
+                                disabled={isFirst || reorderSaving}
+                                title={isFirst ? "At top" : "Move category up"}
+                                className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="text-[11px] font-bold text-neutral-700 px-1 min-w-[20px] text-center">
+                                {catIdx + 1}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleMoveCategory(c, 'down')}
+                                disabled={isLast || reorderSaving}
+                                title={isLast ? "At bottom" : "Move category down"}
+                                className="p-1 text-neutral-600 hover:text-amber-700 hover:bg-white rounded transition-colors disabled:opacity-20 disabled:hover:bg-transparent cursor-pointer disabled:cursor-not-allowed"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
                           <td className="px-5 py-3">
                             {/* Hidden native input specific to this category */}
                             <input 

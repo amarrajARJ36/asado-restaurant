@@ -51,8 +51,9 @@ export function getDefaultBranchData(branchSlug: string): { items: SyncedMenuIte
   const normSlug = (branchSlug || 'kollam').toLowerCase().trim();
 
   if (normSlug === 'alappuzha' || normSlug === 'b2') {
-    const categories: SyncedCategory[] = alappuzhaCategories.map(cat => ({
+    const categories: SyncedCategory[] = alappuzhaCategories.map((cat, idx) => ({
       ...cat,
+      order: typeof (cat as any).order === 'number' ? (cat as any).order : idx,
       branchSlug: 'alappuzha',
       branch_id: 'b2'
     }));
@@ -70,8 +71,9 @@ export function getDefaultBranchData(branchSlug: string): { items: SyncedMenuIte
   }
 
   // Default: Kollam
-  const categories: SyncedCategory[] = kollamCategories.map(cat => ({
+  const categories: SyncedCategory[] = kollamCategories.map((cat, idx) => ({
     ...cat,
+    order: typeof (cat as any).order === 'number' ? (cat as any).order : idx,
     branchSlug: 'kollam',
     branch_id: 'b1'
   }));
@@ -162,7 +164,7 @@ function rowToCategory(row: any): SyncedCategory {
     name: row.name,
     imageUrl: row.image_url || null,
     image: row.image_url || null,
-    order: row.order_num || 0
+    order: typeof row.order_num === 'number' ? row.order_num : 0
   };
 }
 
@@ -217,10 +219,12 @@ export function useMenuSync(branchSlug: string | undefined) {
       const fetchedCats = (catRes.data && catRes.data.length > 0)
         ? catRes.data.map(rowToCategory)
         : defaultData.categories;
+      fetchedCats.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
 
       const fetchedItems = (itemRes.data && itemRes.data.length > 0)
         ? itemRes.data.map(rowToMenuItem)
         : defaultData.items;
+      fetchedItems.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
 
       const nextVer = versionRef.current + 1;
       setCategories(fetchedCats);
@@ -373,30 +377,81 @@ export function useMenuSync(branchSlug: string | undefined) {
     }
   }, [safeSlug]);
 
-  // Reorder items
-  const reorderItems = useCallback(async (reordered: SyncedMenuItem[]) => {
-    setItems(reordered);
+  // Reorder items: safely updates order_num without corrupting remaining items or failing NOT NULL constraints
+  const reorderItems = useCallback(async (updates: { id: string; order: number }[]) => {
+    if (!updates || updates.length === 0) return;
+
+    const orderMap = new Map(updates.map(u => [u.id, u.order]));
+    const updated = itemsRef.current.map(item => {
+      if (orderMap.has(item.id)) {
+        return { ...item, order: orderMap.get(item.id)! };
+      }
+      return item;
+    });
+
+    const nextVer = versionRef.current + 1;
+    setItems(updated);
+    setVersion(nextVer);
     setLocalCache(safeSlug, {
-      items: reordered,
+      items: updated,
       categories: categoriesRef.current,
-      version: versionRef.current + 1
+      version: nextVer
     });
 
     try {
-      const updates = reordered.map((item, idx) => ({
-        id: item.id,
-        branch_slug: safeSlug,
-        category_id: item.category_id || '',
-        category: item.category || '',
-        name: item.name,
-        price: String(item.price),
-        order_num: idx,
-        updated_at: new Date().toISOString()
-      }));
-
-      await supabase.from('menu_items').upsert(updates);
+      await Promise.all(
+        updates.map(u => 
+          supabase
+            .from('menu_items')
+            .update({ order_num: u.order, updated_at: new Date().toISOString() })
+            .eq('id', u.id)
+        )
+      );
     } catch (err) {
-      console.warn('Supabase reorder sync warning:', err);
+      console.error('Supabase reorder sync error:', err);
+      throw err;
+    }
+  }, [safeSlug]);
+
+  // Reorder categories: updates order_num and keeps categories properly sorted
+  const reorderCategories = useCallback(async (updates: { id: string; order: number }[]) => {
+    if (!updates || updates.length === 0) return;
+
+    const orderMap = new Map(updates.map(u => [u.id, u.order]));
+    const updated = categoriesRef.current.map(c => {
+      if (orderMap.has(c.id)) {
+        return { ...c, order: orderMap.get(c.id)! };
+      }
+      return c;
+    });
+
+    updated.sort((a, b) => {
+      const orderA = typeof a.order === 'number' ? a.order : 9999;
+      const orderB = typeof b.order === 'number' ? b.order : 9999;
+      return orderA - orderB;
+    });
+
+    const nextVer = versionRef.current + 1;
+    setCategories(updated);
+    setVersion(nextVer);
+    setLocalCache(safeSlug, {
+      items: itemsRef.current,
+      categories: updated,
+      version: nextVer
+    });
+
+    try {
+      await Promise.all(
+        updates.map(u => 
+          supabase
+            .from('categories')
+            .update({ order_num: u.order })
+            .eq('id', u.id)
+        )
+      );
+    } catch (err) {
+      console.error('Supabase category reorder error:', err);
+      throw err;
     }
   }, [safeSlug]);
 
@@ -489,6 +544,7 @@ export function useMenuSync(branchSlug: string | undefined) {
     restoreItem,
     purgeItem,
     reorderItems,
+    reorderCategories,
     saveCategory,
     deleteCategory,
     refreshMenu
