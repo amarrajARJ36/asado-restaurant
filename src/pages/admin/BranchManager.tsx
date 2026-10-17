@@ -11,8 +11,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import DietarySymbol from '../../components/DietarySymbol';
 import { useBanners, Banner } from '../../hooks/useBanners';
 import { resolveItemCategory, normalizeMenuItems } from '../../lib/categoryUtils';
-import { getLocalDeletedIds, setLocalDeletedId, getLocalPurgedIds, setLocalPurgedId } from '../../lib/localMenuStore';
 import { useMenuSync } from '../../lib/menuSync';
+import { uploadImageToSupabase } from '../../lib/supabase';
 
 export default function BranchManager() {
   const { branchId } = useParams();
@@ -459,15 +459,16 @@ export default function BranchManager() {
 
     setUploadingMenuId(menuId);
     try {
-      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.72 });
+      const publicUrl = await uploadImageToSupabase(file, 'dishes', menuId);
       const existing = menuItems.find(m => m.id === menuId) || allSyncItems.find(m => m.id === menuId) || { id: menuId };
       await syncSaveItem({
         ...existing,
         id: menuId,
-        imageUrl: compressedDataUrl,
-        image: compressedDataUrl,
+        imageUrl: publicUrl,
+        image: publicUrl,
         branchSlug: branchId
       });
+      setSuccessToast("Photo uploaded to cloud storage!");
     } catch (error) {
       console.error("Menu image upload error:", error);
       alert("Image upload failed: " + (error as Error).message);
@@ -499,11 +500,11 @@ export default function BranchManager() {
     if (!file) return;
     setCompressingNewMenuImage(true);
     try {
-      const compressedDataUrl = await compressImage(file, { maxWidth: 800, maxHeight: 800, quality: 0.72 });
-      setNewMenuImage(compressedDataUrl);
+      const publicUrl = await uploadImageToSupabase(file, 'dishes', 'new');
+      setNewMenuImage(publicUrl);
     } catch (error) {
       console.error(error);
-      alert("Failed to process image: " + (error as Error).message);
+      alert("Failed to upload image: " + (error as Error).message);
     } finally {
       setCompressingNewMenuImage(false);
       if (newMenuFileInputRef.current) newMenuFileInputRef.current.value = '';
@@ -585,11 +586,11 @@ export default function BranchManager() {
     if (!file || !editingItem) return;
     setCompressingEditImage(true);
     try {
-      const compressedBase64 = await compressImage(file, { maxWidth: 800, quality: 0.7 });
-      setEditingItem(prev => prev ? { ...prev, imageUrl: compressedBase64 } : null);
-    } catch (err) {
-      console.error("Failed to compress edit image", err);
-      alert("Could not process image. Please try another image.");
+      const publicUrl = await uploadImageToSupabase(file, 'dishes', editingItem.id);
+      setEditingItem(prev => prev ? { ...prev, imageUrl: publicUrl } : null);
+    } catch (err: any) {
+      console.error("Failed to upload edit image", err);
+      alert(`Could not upload image: ${err?.message || 'Please try another image'}`);
     } finally {
       setCompressingEditImage(false);
       if (editFileInputRef.current) editFileInputRef.current.value = '';
@@ -643,10 +644,10 @@ export default function BranchManager() {
     if (!file) return;
     setCompressingNewCatImage(true);
     try {
-      const compressed = await compressCategoryPhoto(file);
-      setNewCategoryImage(compressed);
+      const publicUrl = await uploadImageToSupabase(file, 'categories', 'new');
+      setNewCategoryImage(publicUrl);
     } catch (err: any) {
-      console.error("Failed to compress category image", err);
+      console.error("Failed to upload category image", err);
       alert(`Could not process image: ${err?.message || 'Please try another image'}`);
     } finally {
       setCompressingNewCatImage(false);
@@ -692,16 +693,16 @@ export default function BranchManager() {
 
     setUploadingCatId(targetId);
     try {
-      const compressed = await compressCategoryPhoto(file);
+      const publicUrl = await uploadImageToSupabase(file, 'categories', targetId);
       await syncSaveCategory({
         ...catToUpdate,
-        image: compressed,
-        imageUrl: compressed,
+        image: publicUrl,
+        imageUrl: publicUrl,
         branchSlug: branchId
       });
       setSuccessToast(`Background photo saved for ${catToUpdate.name}!`);
     } catch (err: any) {
-      console.error("Failed to process category photo", err);
+      console.error("Failed to upload category photo", err);
       alert(`Could not upload category photo: ${err?.message || 'Please try another image'}`);
     } finally {
       setUploadingCatId(null);
@@ -732,11 +733,11 @@ export default function BranchManager() {
     if (!file || !editingCategory) return;
     setCompressingEditCatImage(true);
     try {
-      const compressed = await compressCategoryPhoto(file);
-      setEditingCategory(prev => prev ? { ...prev, imageUrl: compressed } : null);
+      const publicUrl = await uploadImageToSupabase(file, 'categories', editingCategory.id);
+      setEditingCategory(prev => prev ? { ...prev, imageUrl: publicUrl } : null);
     } catch (err: any) {
-      console.error("Failed to compress edit category image", err);
-      alert(`Could not process image: ${err?.message || 'Please try another image'}`);
+      console.error("Failed to upload edit category image", err);
+      alert(`Could not upload image: ${err?.message || 'Please try another image'}`);
     } finally {
       setCompressingEditCatImage(false);
       e.target.value = '';
