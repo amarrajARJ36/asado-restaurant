@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS public.banners (
     id TEXT PRIMARY KEY,
     branch_slug TEXT NOT NULL,
     title TEXT NOT NULL,
+    subtitle TEXT DEFAULT '',
     tag_text TEXT DEFAULT 'Special',
     tag_bg TEXT DEFAULT 'bg-amber-200',
     tag_color TEXT DEFAULT 'text-amber-900',
@@ -57,6 +58,9 @@ CREATE TABLE IF NOT EXISTS public.banners (
     active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migration: Add subtitle column to existing banners table (safe to run multiple times)
+ALTER TABLE public.banners ADD COLUMN IF NOT EXISTS subtitle TEXT DEFAULT '';
 
 -- 4b. Create Gallery Images Table
 CREATE TABLE IF NOT EXISTS public.gallery_images (

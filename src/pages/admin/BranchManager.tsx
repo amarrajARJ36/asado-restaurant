@@ -245,6 +245,7 @@ export default function BranchManager() {
         id,
         branch_slug: branchId,
         title: bannerTitle.trim(),
+        subtitle: bannerSubtitle.trim(),
         tag_text: bannerTagText.trim(),
         bg_color: themeConfig.bgColor,
         text_color: themeConfig.textColor,
@@ -281,6 +282,7 @@ export default function BranchManager() {
         id,
         branch_slug: branchId,
         title: bannerTitle.trim() || (branch?.slug === 'kollam' ? "See Live FIFA 2026 Matches (Everyday)" : "Live Music Every Saturday"),
+        subtitle: bannerSubtitle.trim(),
         tag_text: bannerTagText.trim() || "Special Event",
         bg_color: themeConfig.bgColor,
         text_color: themeConfig.textColor,
@@ -586,7 +588,7 @@ export default function BranchManager() {
     if (!file) return;
     setCompressingNewMenuImage(true);
     try {
-      const publicUrl = await uploadImageToSupabase(file, 'dishes', 'new');
+      const publicUrl = await uploadImageToSupabase(file, 'dishes', `new-${Date.now()}`);
       setNewMenuImage(publicUrl);
     } catch (error) {
       console.error(error);

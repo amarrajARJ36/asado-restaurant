@@ -75,7 +75,7 @@ function rowToBanner(r: any): Banner {
     id: r.id,
     branchSlug: r.branch_slug || 'all',
     title: r.title || '',
-    subtitle: '',
+    subtitle: r.subtitle || '',
     tagText: r.tag_text || "Today's Special",
     bgColor: r.bg_color || 'bg-amber-50',
     textColor: r.text_color || 'text-amber-950',
@@ -185,6 +185,7 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
         id,
         branch_slug: newBanner.branchSlug,
         title: newBanner.title,
+        subtitle: newBanner.subtitle || '',
         tag_text: newBanner.tagText,
         bg_color: newBanner.bgColor,
         text_color: newBanner.textColor,
@@ -219,6 +220,7 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
     try {
       const rowUpdates: any = {};
       if (updates.title !== undefined) rowUpdates.title = updates.title;
+      if (updates.subtitle !== undefined) rowUpdates.subtitle = updates.subtitle;
       if (updates.tagText !== undefined) rowUpdates.tag_text = updates.tagText;
       if (updates.bgColor !== undefined) rowUpdates.bg_color = updates.bgColor;
       if (updates.textColor !== undefined) rowUpdates.text_color = updates.textColor;

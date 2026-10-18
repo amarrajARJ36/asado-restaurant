@@ -216,14 +216,16 @@ export function useMenuSync(branchSlug: string | undefined) {
         console.warn('Error fetching menu items from Supabase:', itemRes.error.message);
       }
 
-      const fetchedCats = (catRes.data && catRes.data.length > 0)
-        ? catRes.data.map(rowToCategory)
-        : defaultData.categories;
+      // Only fall back to static data when there's an actual error fetching.
+      // If Supabase returns an empty array (all items intentionally deleted), respect that.
+      const fetchedCats = catRes.error
+        ? defaultData.categories
+        : (catRes.data || []).map(rowToCategory);
       fetchedCats.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
 
-      const fetchedItems = (itemRes.data && itemRes.data.length > 0)
-        ? itemRes.data.map(rowToMenuItem)
-        : defaultData.items;
+      const fetchedItems = itemRes.error
+        ? defaultData.items
+        : (itemRes.data || []).map(rowToMenuItem);
       fetchedItems.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
 
       const nextVer = versionRef.current + 1;
