@@ -123,19 +123,7 @@ export default function AlappuzhaHome() {
 
     fetchGallery();
 
-    const channel = supabase
-      .channel('alappuzha_gallery_sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'gallery_images', filter: 'branch_slug=eq.alappuzha' },
-        () => {
-          fetchGallery();
-        }
-      )
-      .subscribe();
-
     return () => {
-      supabase.removeChannel(channel);
       unsubSync();
       window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
     };

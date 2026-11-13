@@ -94,6 +94,14 @@ CREATE POLICY "Public access banners" ON public.banners FOR ALL USING (true) WIT
 DROP POLICY IF EXISTS "Public access gallery_images" ON public.gallery_images;
 CREATE POLICY "Public access gallery_images" ON public.gallery_images FOR ALL USING (true) WITH CHECK (true);
 
+-- 6b. Explicit Table Permissions for Supabase Data API (PostgREST)
+-- (Required for new tables/projects following Supabase security update)
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.branches TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.categories TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.menu_items TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.banners TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.gallery_images TO anon, authenticated, service_role;
+
 -- 7. Create Storage Bucket for Menu & Category Images
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('restaurant-assets', 'restaurant-assets', true)

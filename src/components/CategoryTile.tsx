@@ -68,6 +68,7 @@ export default function CategoryTile({
             fetchpriority={index < 8 ? "high" : "auto"}
             decoding="async"
             onLoad={() => setIsLoaded(true)}
+            onError={() => setIsLoaded(false)}
             className={`w-full h-full object-cover group-hover:scale-110 transition-all duration-500 ${
               isLoaded ? 'opacity-60 group-hover:opacity-75 scale-100' : 'opacity-0 scale-105'
             }`} 

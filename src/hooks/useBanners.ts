@@ -116,22 +116,30 @@ export function useBanners(branchSlug?: string, options?: { includeInactive?: bo
 
     fetchBanners();
 
-    // Subscribe to real-time banner changes
-    const channel = supabase
-      .channel('banners_sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'banners' },
-        () => {
-          fetchBanners();
-        }
-      )
-      .subscribe();
+    // Subscribe to real-time banner changes ONLY on Admin pages.
+    // Public guests don't need persistent WebSockets, saving egress.
+    const isAdmin = typeof window !== 'undefined' && (window.location.pathname.startsWith('/admin') || Boolean(options?.includeInactive));
+    let channel: any = null;
+
+    if (isAdmin) {
+      channel = supabase
+        .channel('banners_sync')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'banners' },
+          () => {
+            fetchBanners();
+          }
+        )
+        .subscribe();
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
-  }, []);
+  }, [options?.includeInactive]);
 
   // Filter for display
   let filtered: Banner[] = [];

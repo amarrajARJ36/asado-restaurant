@@ -204,7 +204,14 @@ export default function KollamMenu() {
 
                       {hasImg && (
                         <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
-                          <img src={imgUrl} alt={item.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${item.isAvailable === false ? 'grayscale opacity-75' : ''}`} />
+                          <img 
+                            src={imgUrl} 
+                            alt={item.name} 
+                            className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${item.isAvailable === false ? 'grayscale opacity-75' : ''}`}
+                            onError={(e) => {
+                              (e.currentTarget.parentElement as HTMLElement)?.style.setProperty('display', 'none');
+                            }}
+                          />
                           {item.isAvailable === false && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                               <span className="text-[9px] font-bold text-white bg-black/75 px-1 py-0.5 rounded uppercase tracking-wider">Sold Out</span>
@@ -353,7 +360,14 @@ export default function KollamMenu() {
 
                       {hasImg && (
                         <div className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-xl overflow-hidden border border-neutral-200 shadow-sm relative">
-                          <img src={imgUrl} alt={item.name} className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${item.isAvailable === false ? 'grayscale opacity-75' : ''}`} />
+                          <img 
+                            src={imgUrl} 
+                            alt={item.name} 
+                            className={`w-full h-full object-cover group-hover:scale-105 transition-transform ${item.isAvailable === false ? 'grayscale opacity-75' : ''}`}
+                            onError={(e) => {
+                              (e.currentTarget.parentElement as HTMLElement)?.style.setProperty('display', 'none');
+                            }}
+                          />
                           {item.isAvailable === false && (
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                               <span className="text-[9px] font-bold text-white bg-black/75 px-1 py-0.5 rounded uppercase tracking-wider">Sold Out</span>

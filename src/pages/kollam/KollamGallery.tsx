@@ -52,19 +52,7 @@ export default function KollamGallery() {
 
     fetchGallery();
 
-    const channel = supabase
-      .channel('kollam_gallery_sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'gallery_images', filter: 'branch_slug=eq.kollam' },
-        () => {
-          fetchGallery();
-        }
-      )
-      .subscribe();
-
     return () => {
-      supabase.removeChannel(channel);
       unsubSync();
       window.removeEventListener('asado-sync-update', handleCustomSyncEvent);
     };
@@ -138,7 +126,16 @@ export default function KollamGallery() {
                 {img.url && (img.url.includes('.mp4') || img.url.includes('video')) ? (
                   <video src={img.url} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" autoPlay muted loop playsInline />
                 ) : (
-                  <img src={img.url} alt={img.category || "Gallery Photo"} loading="lazy" className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                  <img
+                    src={img.url}
+                    alt={img.category || "Gallery Photo"}
+                    loading="lazy"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    onError={(e) => {
+                      // Fallback in case Supabase Storage is paused/unreachable
+                      (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1543418215-685d0d8dc821?q=80&w=800&auto=format&fit=crop';
+                    }}
+                  />
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                   <div className="absolute bottom-0 left-0 right-0 p-6">

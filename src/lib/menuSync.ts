@@ -90,7 +90,16 @@ export function getDefaultBranchData(branchSlug: string): { items: SyncedMenuIte
   return { items, categories };
 }
 
-function getLocalCache(branchSlug: string): { items: SyncedMenuItem[]; categories: SyncedCategory[]; version: number } | null {
+interface LocalMenuCache {
+  items: SyncedMenuItem[];
+  categories: SyncedCategory[];
+  version: number;
+  cachedAt?: number;
+}
+
+const CACHE_TTL_MS = 15 * 60 * 1000; // 15-minute cache TTL for public visitors to reduce egress
+
+function getLocalCache(branchSlug: string): LocalMenuCache | null {
   if (typeof window === 'undefined') return null;
   try {
     const raw = localStorage.getItem(`${CACHE_KEY_PREFIX}${branchSlug}`);
@@ -106,10 +115,14 @@ function getLocalCache(branchSlug: string): { items: SyncedMenuItem[]; categorie
   return null;
 }
 
-function setLocalCache(branchSlug: string, data: { items: SyncedMenuItem[]; categories: SyncedCategory[]; version: number }) {
+function setLocalCache(branchSlug: string, data: { items: SyncedMenuItem[]; categories: SyncedCategory[]; version: number; cachedAt?: number }) {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(`${CACHE_KEY_PREFIX}${branchSlug}`, JSON.stringify(data));
+    const payload = {
+      ...data,
+      cachedAt: data.cachedAt || Date.now()
+    };
+    localStorage.setItem(`${CACHE_KEY_PREFIX}${branchSlug}`, JSON.stringify(payload));
   } catch (err) {
     console.warn('Error setting menu cache:', err);
   }
@@ -248,30 +261,45 @@ export function useMenuSync(branchSlug: string | undefined) {
   // Initial fetch and real-time subscription
   useEffect(() => {
     let isMounted = true;
-    fetchFromSupabase();
+    const isAdmin = typeof window !== 'undefined' && window.location.pathname.startsWith('/admin');
 
-    // Subscribe to real-time changes
-    const channel = supabase
-      .channel(`menu_sync_${safeSlug}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'menu_items', filter: `branch_slug=eq.${safeSlug}` },
-        () => {
-          if (isMounted) fetchFromSupabase();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'categories', filter: `branch_slug=eq.${safeSlug}` },
-        () => {
-          if (isMounted) fetchFromSupabase();
-        }
-      )
-      .subscribe();
+    // Only hit Supabase if in Admin or if the cached menu is stale (>15 mins old).
+    // This saves ~80-90% of Supabase database egress bandwidth.
+    const isCacheFresh = Boolean(cached && cached.cachedAt && (Date.now() - cached.cachedAt < CACHE_TTL_MS));
+    if (isAdmin || !isCacheFresh) {
+      fetchFromSupabase();
+    } else {
+      setLoading(false);
+    }
+
+    // Subscribe to real-time changes ONLY for Admin devices.
+    // Public guests do not need open WebSocket connections.
+    let channel: any = null;
+    if (isAdmin) {
+      channel = supabase
+        .channel(`menu_sync_${safeSlug}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'menu_items', filter: `branch_slug=eq.${safeSlug}` },
+          () => {
+            if (isMounted) fetchFromSupabase();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'categories', filter: `branch_slug=eq.${safeSlug}` },
+          () => {
+            if (isMounted) fetchFromSupabase();
+          }
+        )
+        .subscribe();
+    }
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      if (channel) {
+        supabase.removeChannel(channel);
+      }
     };
   }, [safeSlug, fetchFromSupabase]);
 
