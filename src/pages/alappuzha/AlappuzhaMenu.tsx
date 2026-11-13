@@ -21,10 +21,19 @@ export default function AlappuzhaMenu() {
     loading: menuLoading
   } = useMenuSync('alappuzha');
 
-  // Customer guest menu only shows available (not sold out) dishes
+  // Active categories for customers (categories marked ON)
+  const activeAlappuzhaCategories = useMemo(() => {
+    return alappuzhaCategories.filter(c => c.isActive !== false);
+  }, [alappuzhaCategories]);
+
+  const activeCategoryNames = useMemo(() => {
+    return new Set(activeAlappuzhaCategories.map(c => c.name));
+  }, [activeAlappuzhaCategories]);
+
+  // Customer guest menu only shows available (not sold out) dishes from active categories
   const alappuzhaMenu = useMemo(() => {
-    return rawAlappuzhaMenu.filter(item => item.isAvailable !== false);
-  }, [rawAlappuzhaMenu]);
+    return rawAlappuzhaMenu.filter(item => item.isAvailable !== false && (!item.category || activeCategoryNames.has(item.category)));
+  }, [rawAlappuzhaMenu, activeCategoryNames]);
 
   const { banners } = useBanners('alappuzha');
   const [currentBanner, setCurrentBanner] = useState(0);
@@ -41,7 +50,7 @@ export default function AlappuzhaMenu() {
     return () => window.removeEventListener('resize', checkIsDesktop);
   }, []);
   
-  const activeCategory = alappuzhaCategories.find(c => c.name === activeCategoryName) || alappuzhaCategories.find(c => c.id === activeCategoryName);
+  const activeCategory = activeAlappuzhaCategories.find(c => c.name === activeCategoryName) || activeAlappuzhaCategories.find(c => c.id === activeCategoryName);
   const isSearchActive = searchQuery.length > 0;
 
   const filteredMenu = useMemo(() => {
@@ -71,8 +80,8 @@ export default function AlappuzhaMenu() {
     if (selectedCategoryTab !== 'All') {
       catList = [selectedCategoryTab];
     } else {
-      const knownNames = new Set(alappuzhaCategories.map(c => c.name));
-      catList = alappuzhaCategories.map(c => c.name);
+      const knownNames = new Set(activeAlappuzhaCategories.map(c => c.name));
+      catList = activeAlappuzhaCategories.map(c => c.name);
       alappuzhaMenu.forEach(item => {
         if (item.category && !knownNames.has(item.category) && !catList.includes(item.category)) {
           catList.push(item.category);
@@ -89,14 +98,14 @@ export default function AlappuzhaMenu() {
           if (orderA !== orderB) return orderA - orderB;
           return (a.name || '').localeCompare(b.name || '');
         });
-      const catObj = alappuzhaCategories.find(c => c.name === catName);
+      const catObj = activeAlappuzhaCategories.find(c => c.name === catName);
       return {
         categoryName: catName,
         categoryObj: catObj,
         items
       };
     }).filter(group => group.items.length > 0);
-  }, [alappuzhaCategories, alappuzhaMenu, selectedCategoryTab]);
+  }, [activeAlappuzhaCategories, alappuzhaMenu, selectedCategoryTab]);
 
   useEffect(() => {
     if (activeCategoryName) {
@@ -310,7 +319,7 @@ export default function AlappuzhaMenu() {
               >
                 All Categories ({alappuzhaMenu.length})
               </button>
-              {alappuzhaCategories.map(c => {
+              {activeAlappuzhaCategories.map(c => {
                 const count = alappuzhaMenu.filter(m => m.category === c.name).length;
                 const isSelected = selectedCategoryTab === c.name;
                 return (
@@ -453,7 +462,7 @@ export default function AlappuzhaMenu() {
             ) : (
               /* CATEGORY TILES (IMAGE CARDS) */
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {alappuzhaCategories.map((category, index) => {
+                {activeAlappuzhaCategories.map((category, index) => {
                   const itemCount = alappuzhaMenu.filter(m => m.category === category.name).length;
                   return (
                     <CategoryTile

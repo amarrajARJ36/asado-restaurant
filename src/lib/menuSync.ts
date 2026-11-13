@@ -39,6 +39,7 @@ export interface SyncedCategory {
   branch_id?: string;
   branchSlug?: string;
   isDeleted?: boolean;
+  isActive?: boolean;
   order?: number;
 }
 
@@ -210,6 +211,7 @@ function rowToCategory(row: any): SyncedCategory {
     name: row.name,
     imageUrl: row.image_url || null,
     image: row.image_url || null,
+    isActive: row.is_active !== undefined ? Boolean(row.is_active) : true,
     order: typeof row.order_num === 'number' ? row.order_num : 0
   };
 }
@@ -563,21 +565,41 @@ export function useMenuSync(branchSlug: string | undefined) {
       version: nextVer
     });
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('asado-sync-update', { detail: { branchSlug: safeSlug, category } }));
+    }
+
     try {
-      const { error } = await supabase.from('categories').upsert({
+      const payload: any = {
         id: category.id,
         branch_slug: safeSlug,
         name: category.name,
         image_url: category.imageUrl || category.image || null,
         order_num: category.order || (idx >= 0 ? idx : updated.length)
-      });
+      };
+      if (category.isActive !== undefined) {
+        payload.is_active = category.isActive;
+      }
+      const { error } = await supabase.from('categories').upsert(payload);
       if (error) {
-        console.warn('Supabase saveCategory warning (saved locally):', error.message);
+        if (error.message && error.message.includes('is_active')) {
+          delete payload.is_active;
+          await supabase.from('categories').upsert(payload);
+        } else {
+          console.warn('Supabase saveCategory warning (saved locally):', error.message);
+        }
       }
     } catch (err: any) {
       console.warn('Failed to save category to Supabase (saved locally):', err?.message || err);
     }
   }, [safeSlug]);
+
+  // Toggle Category Availability (ON / OFF)
+  const toggleCategoryAvailability = useCallback(async (category: SyncedCategory) => {
+    const nextActive = !(category.isActive !== false);
+    const updated = { ...category, isActive: nextActive };
+    await saveCategory(updated);
+  }, [saveCategory]);
 
   // Delete Category
   const deleteCategory = useCallback(async (catId: string) => {
@@ -629,6 +651,7 @@ export function useMenuSync(branchSlug: string | undefined) {
     reorderItems,
     reorderCategories,
     saveCategory,
+    toggleCategoryAvailability,
     deleteCategory,
     refreshMenu
   };

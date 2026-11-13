@@ -21,10 +21,19 @@ export default function KollamMenu() {
     loading: menuLoading
   } = useMenuSync('kollam');
 
-  // Customer guest menu only shows available (not sold out) dishes
+  // Active categories for customers (categories marked ON)
+  const activeKollamCategories = useMemo(() => {
+    return kollamCategories.filter(c => c.isActive !== false);
+  }, [kollamCategories]);
+
+  const activeCategoryNames = useMemo(() => {
+    return new Set(activeKollamCategories.map(c => c.name));
+  }, [activeKollamCategories]);
+
+  // Customer guest menu only shows available (not sold out) dishes from active categories
   const kollamMenu = useMemo(() => {
-    return rawKollamMenu.filter(item => item.isAvailable !== false);
-  }, [rawKollamMenu]);
+    return rawKollamMenu.filter(item => item.isAvailable !== false && (!item.category || activeCategoryNames.has(item.category)));
+  }, [rawKollamMenu, activeCategoryNames]);
 
   const { banners } = useBanners('kollam');
 
@@ -36,7 +45,7 @@ export default function KollamMenu() {
   }, []);
   
   // To handle the sliding panel state
-  const activeCategory = kollamCategories.find(c => c.name === activeCategoryName) || kollamCategories.find(c => c.id === activeCategoryName);
+  const activeCategory = activeKollamCategories.find(c => c.name === activeCategoryName) || activeKollamCategories.find(c => c.id === activeCategoryName);
   const isSearchActive = searchQuery.length > 0;
 
   // If search is active, we might want to show items instead of categories
@@ -235,7 +244,7 @@ export default function KollamMenu() {
 
             {/* CATEGORY TILES (IMAGE CARDS) */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-              {kollamCategories.map((category, index) => {
+              {activeKollamCategories.map((category, index) => {
                 const itemCount = kollamMenu.filter(m => m.category === category.name).length;
                 return (
                   <CategoryTile

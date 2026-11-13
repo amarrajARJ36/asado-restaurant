@@ -14,6 +14,7 @@ export interface Category {
   name: string;
   image?: string;
   imageUrl?: string;
+  isActive?: boolean;
 }
 
 export interface FoodItem {

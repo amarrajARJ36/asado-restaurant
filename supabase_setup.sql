@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS public.banners (
 -- Migration: Add subtitle column to existing banners table (safe to run multiple times)
 ALTER TABLE public.banners ADD COLUMN IF NOT EXISTS subtitle TEXT DEFAULT '';
 
+-- Migration: Add is_active column to existing categories table (safe to run multiple times)
+ALTER TABLE public.categories ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+
 -- 4b. Create Gallery Images Table
 CREATE TABLE IF NOT EXISTS public.gallery_images (
     id TEXT PRIMARY KEY,

@@ -34,6 +34,7 @@ export default function BranchManager() {
     reorderItems: syncReorderItems,
     reorderCategories: syncReorderCategories,
     saveCategory: syncSaveCategory,
+    toggleCategoryAvailability: syncToggleCategoryAvailability,
     deleteCategory: syncDeleteCategory
   } = useMenuSync(branchId);
 
@@ -814,11 +815,22 @@ export default function BranchManager() {
     setSuccessToast(`Background photo reset for ${cat.name}!`);
   };
 
+  const toggleCategoryStatus = async (cat: any) => {
+    try {
+      const isCurrentlyActive = cat.isActive !== false;
+      await syncToggleCategoryAvailability(cat);
+      setSuccessToast(`Category "${cat.name}" is now ${isCurrentlyActive ? 'Hidden (OFF)' : 'Active (ON)'}`);
+    } catch (e) {
+      console.error('toggleCategoryStatus error:', e);
+    }
+  };
+
   const handleStartEditCategory = (cat: any) => {
     setEditingCategory({
       id: cat.id,
       name: cat.name,
-      imageUrl: cat.imageUrl || cat.image || ''
+      imageUrl: cat.imageUrl || cat.image || '',
+      isActive: cat.isActive !== false
     });
   };
 
@@ -841,12 +853,15 @@ export default function BranchManager() {
   const handleSaveEditCategory = async () => {
     if (!editingCategory || !editingCategory.name.trim() || !branchId) return;
     try {
+      const existing = categories.find(c => c.id === editingCategory.id);
       await syncSaveCategory({
+        ...existing,
         id: editingCategory.id,
         name: editingCategory.name.trim(),
         branchSlug: branchId,
         image: editingCategory.imageUrl || null,
-        imageUrl: editingCategory.imageUrl || null
+        imageUrl: editingCategory.imageUrl || null,
+        isActive: editingCategory.isActive !== false
       });
       setSuccessToast(`Category "${editingCategory.name}" updated!`);
       setEditingCategory(null);
@@ -1696,6 +1711,8 @@ export default function BranchManager() {
                 <div className="space-y-4">
                   {categoryWiseMenu.map((group) => {
                     const isCollapsed = Boolean(collapsedCategories[group.categoryName]);
+                    const catObj = categories.find(c => c.name === group.categoryName);
+                    const isCatActive = catObj ? catObj.isActive !== false : true;
 
                     return (
                       <div key={group.categoryName} className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-xs">
@@ -1718,6 +1735,11 @@ export default function BranchManager() {
                             <div>
                               <h3 className="font-bold text-neutral-900 text-base flex items-center gap-2">
                                 <span>{group.categoryName}</span>
+                                {!isCatActive && (
+                                  <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full border border-rose-200">
+                                    Hidden (OFF)
+                                  </span>
+                                )}
                               </h3>
                               <span className="text-xs text-neutral-500 font-medium">
                                 {group.items.length} {group.items.length === 1 ? 'dish' : 'dishes'} in this category {isCollapsed && '(Click to expand)'}
@@ -1726,6 +1748,27 @@ export default function BranchManager() {
                           </div>
 
                           <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                            {catObj && (
+                              <button
+                                type="button"
+                                onClick={() => toggleCategoryStatus(catObj)}
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                  isCatActive
+                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                                    : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100 shadow-2xs'
+                                }`}
+                                title={isCatActive ? "Category is LIVE on guest menu. Click to toggle OFF (Hide)" : "Category is HIDDEN from guest menu. Click to toggle ON (Show)"}
+                              >
+                                <span className={`w-6 h-3.5 flex items-center rounded-full p-0.5 transition-colors ${
+                                  isCatActive ? 'bg-emerald-500' : 'bg-neutral-300'
+                                }`}>
+                                  <span className={`bg-white w-2.5 h-2.5 rounded-full shadow-xs transform transition-transform ${
+                                    isCatActive ? 'translate-x-2.5' : 'translate-x-0'
+                                  }`} />
+                                </span>
+                                <span>{isCatActive ? 'Category ON' : 'Category OFF'}</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
@@ -2128,6 +2171,7 @@ export default function BranchManager() {
                       <th className="px-4 py-3.5 text-center w-28">Order</th>
                       <th className="px-5 py-3.5">Background Photo</th>
                       <th className="px-5 py-3.5">Category Name</th>
+                      <th className="px-5 py-3.5 text-center">Status</th>
                       <th className="px-5 py-3.5">Dishes</th>
                       <th className="px-5 py-3.5 text-right">Actions</th>
                     </tr>
@@ -2213,6 +2257,28 @@ export default function BranchManager() {
 
                           <td className="px-5 py-3 font-bold text-neutral-900">
                             {c.name}
+                          </td>
+
+                          <td className="px-5 py-3 text-center whitespace-nowrap">
+                            <button
+                              type="button"
+                              onClick={() => toggleCategoryStatus(c)}
+                              className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                c.isActive !== false
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                                  : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100 shadow-2xs'
+                              }`}
+                              title={c.isActive !== false ? "Category is LIVE on guest menu. Click to toggle OFF (Hide)" : "Category is HIDDEN from guest menu. Click to toggle ON (Show)"}
+                            >
+                              <span className={`w-7 h-4 flex items-center rounded-full p-0.5 transition-colors ${
+                                c.isActive !== false ? 'bg-emerald-500' : 'bg-neutral-300'
+                              }`}>
+                                <span className={`bg-white w-3 h-3 rounded-full shadow-md transform transition-transform ${
+                                  c.isActive !== false ? 'translate-x-3' : 'translate-x-0'
+                                }`} />
+                              </span>
+                              <span>{c.isActive !== false ? 'Active (ON)' : 'Hidden (OFF)'}</span>
+                            </button>
                           </td>
 
                           <td className="px-5 py-3 text-neutral-500 font-medium">
@@ -2574,6 +2640,34 @@ export default function BranchManager() {
                     onChange={(e) => setEditingCategory(prev => prev ? { ...prev, name: e.target.value } : null)}
                     className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 placeholder:text-neutral-400 outline-none focus:ring-2 focus:ring-amber-500"
                   />
+                </div>
+
+                {/* Category Visibility on Guest Menu */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-neutral-600 mb-1.5">
+                    Category Status on Guest Menu
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setEditingCategory(prev => prev ? { ...prev, isActive: prev.isActive === false ? true : false } : null)}
+                    className={`inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all cursor-pointer w-full justify-between ${
+                      editingCategory.isActive !== false
+                        ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                        : 'bg-rose-50 border-rose-300 text-rose-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${editingCategory.isActive !== false ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                      <span>{editingCategory.isActive !== false ? 'Category Active (Visible to Guests)' : 'Category Hidden (OFF / Hidden from Guests)'}</span>
+                    </div>
+                    <span className={`w-8 h-4.5 flex items-center rounded-full p-0.5 transition-colors ${
+                      editingCategory.isActive !== false ? 'bg-emerald-500' : 'bg-neutral-300'
+                    }`}>
+                      <span className={`bg-white w-3.5 h-3.5 rounded-full shadow-md transform transition-transform ${
+                        editingCategory.isActive !== false ? 'translate-x-3.5' : 'translate-x-0'
+                      }`} />
+                    </span>
+                  </button>
                 </div>
 
                 <div>
