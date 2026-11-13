@@ -637,7 +637,13 @@ export default function BranchManager() {
   };
 
   const toggleItemAvailability = async (item: any) => {
-    await syncToggleAvailability(item);
+    try {
+      const isCurrentlyAvail = item.isAvailable !== false;
+      await syncToggleAvailability(item);
+      setSuccessToast(`"${item.name}" is now ${isCurrentlyAvail ? 'Out of Stock (OFF)' : 'In Stock (ON)'}`);
+    } catch (e) {
+      console.error('toggleItemAvailability error:', e);
+    }
   };
 
   const toggleItemVeg = async (item: any) => {

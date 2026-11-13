@@ -128,6 +128,39 @@ function setLocalCache(branchSlug: string, data: { items: SyncedMenuItem[]; cate
   }
 }
 
+export function getPendingSyncItems(branchSlug: string): SyncedMenuItem[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(`asado_pending_sync_${branchSlug}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function addPendingSyncItem(branchSlug: string, item: SyncedMenuItem) {
+  if (typeof window === 'undefined') return;
+  try {
+    const pending = getPendingSyncItems(branchSlug);
+    const existingIdx = pending.findIndex(p => p.id === item.id);
+    if (existingIdx >= 0) {
+      pending[existingIdx] = item;
+    } else {
+      pending.push(item);
+    }
+    localStorage.setItem(`asado_pending_sync_${branchSlug}`, JSON.stringify(pending));
+  } catch {}
+}
+
+export function clearPendingSyncItems(branchSlug: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(`asado_pending_sync_${branchSlug}`);
+  } catch {}
+}
+
 function rowToMenuItem(row: any): SyncedMenuItem {
   return {
     id: row.id,
@@ -229,16 +262,39 @@ export function useMenuSync(branchSlug: string | undefined) {
         console.warn('Error fetching menu items from Supabase:', itemRes.error.message);
       }
 
-      // Only fall back to static data when there's an actual error fetching.
-      // If Supabase returns an empty array (all items intentionally deleted), respect that.
-      const fetchedCats = catRes.error
-        ? defaultData.categories
-        : (catRes.data || []).map(rowToCategory);
-      fetchedCats.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
+      // If Supabase failed (e.g. paused until Nov 17 / 402 / network error),
+      // PRESERVE whatever is in local cache so user edits (like toggling status to OFF) are not lost!
+      if (catRes.error || itemRes.error) {
+        const cachedData = getLocalCache(safeSlug);
+        if (cachedData && cachedData.items && cachedData.items.length > 0) {
+          console.log('Supabase currently paused or unreachable; preserving local menu edits.');
+          setItems(cachedData.items);
+          setCategories(cachedData.categories);
+          setLoading(false);
+          return;
+        }
+      }
 
-      const fetchedItems = itemRes.error
-        ? defaultData.items
-        : (itemRes.data || []).map(rowToMenuItem);
+      // When Supabase succeeds:
+      let fetchedCats = (catRes.data || []).map(rowToCategory);
+      let fetchedItems = (itemRes.data || []).map(rowToMenuItem);
+
+      // Re-apply and push any offline pending edits that were saved while Supabase was paused
+      const pendingItems = getPendingSyncItems(safeSlug);
+      if (pendingItems.length > 0) {
+        const pendingMap = new Map(pendingItems.map(p => [p.id, p]));
+        fetchedItems = fetchedItems.map(it => pendingMap.has(it.id) ? { ...it, ...pendingMap.get(it.id)! } : it);
+
+        try {
+          await Promise.all(pendingItems.map(p => supabase.from('menu_items').upsert(menuItemToRow(p, safeSlug))));
+          clearPendingSyncItems(safeSlug);
+          console.log(`Synced ${pendingItems.length} offline edits to Supabase!`);
+        } catch (syncErr) {
+          console.warn('Failed to sync pending items to Supabase:', syncErr);
+        }
+      }
+
+      fetchedCats.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
       fetchedItems.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
 
       const nextVer = versionRef.current + 1;
@@ -331,17 +387,22 @@ export function useMenuSync(branchSlug: string | undefined) {
       version: nextVer
     });
 
-    // Write to Supabase PostgreSQL
+    // Notify other components & browser tabs
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('asado-sync-update', { detail: { branchSlug: safeSlug, item: itemWithSlug } }));
+    }
+
+    // Write to Supabase PostgreSQL (or queue locally if Supabase is temporarily paused)
     try {
       const row = menuItemToRow(itemWithSlug, safeSlug);
       const { error } = await supabase.from('menu_items').upsert(row);
       if (error) {
-        console.error('Supabase saveItem error:', error.message);
-        throw error;
+        console.warn('Supabase saveItem warning (persisted locally in sync queue):', error.message);
+        addPendingSyncItem(safeSlug, itemWithSlug);
       }
-    } catch (err) {
-      console.error('Failed to save item to Supabase:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Supabase unreachable or restricted (persisted locally in sync queue):', err?.message || err);
+      addPendingSyncItem(safeSlug, itemWithSlug);
     }
   }, [safeSlug]);
 
@@ -398,12 +459,10 @@ export function useMenuSync(branchSlug: string | undefined) {
     try {
       const { error } = await supabase.from('menu_items').delete().eq('id', itemId);
       if (error) {
-        console.error('Supabase purgeItem error:', error.message);
-        throw error;
+        console.warn('Supabase purgeItem warning (purged locally):', error.message);
       }
-    } catch (err) {
-      console.error('Failed to purge item from Supabase:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Supabase unreachable (purged locally):', err?.message || err);
     }
   }, [safeSlug]);
 
@@ -437,9 +496,8 @@ export function useMenuSync(branchSlug: string | undefined) {
             .eq('id', u.id)
         )
       );
-    } catch (err) {
-      console.error('Supabase reorder sync error:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Supabase reorder sync warning (reordered locally):', err?.message || err);
     }
   }, [safeSlug]);
 
@@ -479,9 +537,8 @@ export function useMenuSync(branchSlug: string | undefined) {
             .eq('id', u.id)
         )
       );
-    } catch (err) {
-      console.error('Supabase category reorder error:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Supabase category reorder warning (reordered locally):', err?.message || err);
     }
   }, [safeSlug]);
 
@@ -515,12 +572,10 @@ export function useMenuSync(branchSlug: string | undefined) {
         order_num: category.order || (idx >= 0 ? idx : updated.length)
       });
       if (error) {
-        console.error('Supabase saveCategory error:', error.message);
-        throw error;
+        console.warn('Supabase saveCategory warning (saved locally):', error.message);
       }
-    } catch (err) {
-      console.error('Failed to save category to Supabase:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Failed to save category to Supabase (saved locally):', err?.message || err);
     }
   }, [safeSlug]);
 
@@ -539,12 +594,10 @@ export function useMenuSync(branchSlug: string | undefined) {
     try {
       const { error } = await supabase.from('categories').delete().eq('id', catId);
       if (error) {
-        console.error('Supabase deleteCategory error:', error.message);
-        throw error;
+        console.warn('Supabase deleteCategory warning (deleted locally):', error.message);
       }
-    } catch (err) {
-      console.error('Failed to delete category from Supabase:', err);
-      throw err;
+    } catch (err: any) {
+      console.warn('Supabase deleteCategory offline (deleted locally):', err?.message || err);
     }
   }, [safeSlug]);
 
