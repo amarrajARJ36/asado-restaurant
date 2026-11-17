@@ -277,17 +277,26 @@ export function useMenuSync(branchSlug: string | undefined) {
   // Fetch complete branch menu from Supabase
   const fetchFromSupabase = useCallback(async () => {
     try {
-      const [catRes, itemRes] = await Promise.all([
-        supabase
-          .from('categories')
-          .select('*')
-          .eq('branch_slug', safeSlug)
-          .order('order_num', { ascending: true }),
-        supabase
-          .from('menu_items')
-          .select('*')
-          .eq('branch_slug', safeSlug)
-          .order('order_num', { ascending: true })
+      // Race against a 5-second timeout so customers on slow 4G/5G or with dropped packets never get stuck
+      const [catRes, itemRes] = await Promise.race([
+        Promise.all([
+          supabase
+            .from('categories')
+            .select('*')
+            .eq('branch_slug', safeSlug)
+            .order('order_num', { ascending: true }),
+          supabase
+            .from('menu_items')
+            .select('*')
+            .eq('branch_slug', safeSlug)
+            .order('order_num', { ascending: true })
+        ]),
+        new Promise<[any, any]>((resolve) =>
+          setTimeout(() => resolve([
+            { error: { message: 'Network timeout' }, data: null },
+            { error: { message: 'Network timeout' }, data: null }
+          ]), 5000)
+        )
       ]);
 
       if (catRes.error) {
@@ -297,17 +306,22 @@ export function useMenuSync(branchSlug: string | undefined) {
         console.warn('Error fetching menu items from Supabase:', itemRes.error.message);
       }
 
-      // If Supabase failed (e.g. paused until Nov 17 / 402 / network error),
-      // PRESERVE whatever is in local cache so user edits (like toggling status to OFF) are not lost!
+      // If Supabase failed or timed out (e.g. paused / 402 / poor reception):
+      // 1. If customer has cached edits, keep their local cache.
+      // 2. If it's a first-time customer with no cache, fall back to the bundled 145+ dishes so the menu NEVER fails!
       if (catRes.error || itemRes.error) {
         const cachedData = getLocalCache(safeSlug);
         if (cachedData && cachedData.items && cachedData.items.length > 0) {
           console.log('Supabase currently paused or unreachable; preserving local menu edits.');
           setItems(cachedData.items);
           setCategories(cachedData.categories);
-          setLoading(false);
-          return;
+        } else {
+          console.log('Supabase unreachable or first-time visitor; rendering bundled default menu.');
+          setItems(defaultData.items);
+          setCategories(defaultData.categories);
         }
+        setLoading(false);
+        return;
       }
 
       // When Supabase succeeds:
@@ -368,6 +382,13 @@ export function useMenuSync(branchSlug: string | undefined) {
         } catch (syncErr) {
           console.warn('Failed to sync pending categories to Supabase:', syncErr);
         }
+      }
+
+      if (fetchedCats.length === 0 && defaultData.categories.length > 0) {
+        fetchedCats = defaultData.categories;
+      }
+      if (fetchedItems.length === 0 && defaultData.items.length > 0) {
+        fetchedItems = defaultData.items;
       }
 
       fetchedCats.sort((a, b) => (typeof a.order === 'number' ? a.order : 9999) - (typeof b.order === 'number' ? b.order : 9999));
