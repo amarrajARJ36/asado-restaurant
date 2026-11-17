@@ -479,14 +479,39 @@ export function useMenuSync(branchSlug: string | undefined) {
       }
     };
 
+    // Auto-refresh when customer switches back to this tab (e.g. re-scanning QR code, returning to Safari/Chrome)
+    let lastVisibilityCheck = 0;
+    const handleTabReactivation = () => {
+      if (!isMounted) return;
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        const now = Date.now();
+        // Throttle to at most once every 5 seconds to avoid spamming on rapid app switching
+        if (now - lastVisibilityCheck > 5000) {
+          lastVisibilityCheck = now;
+          console.log('Tab became visible / focused (customer returned or re-scanned QR) — checking for menu updates...');
+          fetchFromSupabase();
+        }
+      }
+    };
+
     if (typeof window !== 'undefined') {
       window.addEventListener('asado-sync-update', handleSyncEvent);
+      window.addEventListener('pageshow', handleTabReactivation);
+      window.addEventListener('focus', handleTabReactivation);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleTabReactivation);
     }
 
     return () => {
       isMounted = false;
       if (typeof window !== 'undefined') {
         window.removeEventListener('asado-sync-update', handleSyncEvent);
+        window.removeEventListener('pageshow', handleTabReactivation);
+        window.removeEventListener('focus', handleTabReactivation);
+      }
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleTabReactivation);
       }
       if (channel) {
         supabase.removeChannel(channel);
