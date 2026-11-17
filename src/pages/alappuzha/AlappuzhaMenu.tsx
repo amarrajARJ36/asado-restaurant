@@ -27,12 +27,16 @@ export default function AlappuzhaMenu() {
   }, [alappuzhaCategories]);
 
   const activeCategoryNames = useMemo(() => {
-    return new Set(activeAlappuzhaCategories.map(c => c.name));
+    return new Set(activeAlappuzhaCategories.map(c => (c.name || '').trim().toLowerCase()));
   }, [activeAlappuzhaCategories]);
 
   // Customer guest menu only shows available (not sold out) dishes from active categories
   const alappuzhaMenu = useMemo(() => {
-    return rawAlappuzhaMenu.filter(item => item.isAvailable !== false && (!item.category || activeCategoryNames.has(item.category)));
+    return rawAlappuzhaMenu.filter(item => {
+      if (item.isAvailable === false) return false;
+      if (!item.category) return true;
+      return activeCategoryNames.has(item.category.trim().toLowerCase());
+    });
   }, [rawAlappuzhaMenu, activeCategoryNames]);
 
   const { banners } = useBanners('alappuzha');
@@ -50,7 +54,7 @@ export default function AlappuzhaMenu() {
     return () => window.removeEventListener('resize', checkIsDesktop);
   }, []);
   
-  const activeCategory = activeAlappuzhaCategories.find(c => c.name === activeCategoryName) || activeAlappuzhaCategories.find(c => c.id === activeCategoryName);
+  const activeCategory = activeAlappuzhaCategories.find(c => (c.name || '').trim().toLowerCase() === (activeCategoryName || '').trim().toLowerCase()) || activeAlappuzhaCategories.find(c => c.id === activeCategoryName);
   const isSearchActive = searchQuery.length > 0;
 
   const filteredMenu = useMemo(() => {
@@ -65,7 +69,7 @@ export default function AlappuzhaMenu() {
   const categoryItems = useMemo(() => {
     if (!activeCategoryName) return [];
     return alappuzhaMenu
-      .filter(item => item.category === activeCategoryName)
+      .filter(item => (item.category || '').trim().toLowerCase() === (activeCategoryName || '').trim().toLowerCase())
       .sort((a, b) => {
         const orderA = typeof a.order === 'number' ? a.order : 9999;
         const orderB = typeof b.order === 'number' ? b.order : 9999;
@@ -80,25 +84,19 @@ export default function AlappuzhaMenu() {
     if (selectedCategoryTab !== 'All') {
       catList = [selectedCategoryTab];
     } else {
-      const knownNames = new Set(activeAlappuzhaCategories.map(c => c.name));
       catList = activeAlappuzhaCategories.map(c => c.name);
-      alappuzhaMenu.forEach(item => {
-        if (item.category && !knownNames.has(item.category) && !catList.includes(item.category)) {
-          catList.push(item.category);
-        }
-      });
     }
 
     return catList.map(catName => {
       const items = alappuzhaMenu
-        .filter(m => m.category === catName)
+        .filter(m => (m.category || '').trim().toLowerCase() === catName.trim().toLowerCase())
         .sort((a, b) => {
           const orderA = typeof a.order === 'number' ? a.order : 9999;
           const orderB = typeof b.order === 'number' ? b.order : 9999;
           if (orderA !== orderB) return orderA - orderB;
           return (a.name || '').localeCompare(b.name || '');
         });
-      const catObj = activeAlappuzhaCategories.find(c => c.name === catName);
+      const catObj = activeAlappuzhaCategories.find(c => (c.name || '').trim().toLowerCase() === catName.trim().toLowerCase());
       return {
         categoryName: catName,
         categoryObj: catObj,
@@ -320,7 +318,7 @@ export default function AlappuzhaMenu() {
                 All Categories ({alappuzhaMenu.length})
               </button>
               {activeAlappuzhaCategories.map(c => {
-                const count = alappuzhaMenu.filter(m => m.category === c.name).length;
+                const count = alappuzhaMenu.filter(m => (m.category || '').trim().toLowerCase() === c.name.trim().toLowerCase()).length;
                 const isSelected = selectedCategoryTab === c.name;
                 return (
                   <button
@@ -463,7 +461,7 @@ export default function AlappuzhaMenu() {
               /* CATEGORY TILES (IMAGE CARDS) */
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                 {activeAlappuzhaCategories.map((category, index) => {
-                  const itemCount = alappuzhaMenu.filter(m => m.category === category.name).length;
+                  const itemCount = alappuzhaMenu.filter(m => (m.category || '').trim().toLowerCase() === category.name.trim().toLowerCase()).length;
                   return (
                     <CategoryTile
                       key={category.id}

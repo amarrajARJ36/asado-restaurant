@@ -1711,8 +1711,14 @@ export default function BranchManager() {
                 <div className="space-y-4">
                   {categoryWiseMenu.map((group) => {
                     const isCollapsed = Boolean(collapsedCategories[group.categoryName]);
-                    const catObj = categories.find(c => c.name === group.categoryName);
-                    const isCatActive = catObj ? catObj.isActive !== false : true;
+                    const catObj = categories.find(c => (c.name || '').trim().toLowerCase() === group.categoryName.trim().toLowerCase()) || {
+                      id: `cat-${group.categoryName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                      name: group.categoryName,
+                      branchSlug: branchId,
+                      isActive: true,
+                      order: 999
+                    };
+                    const isCatActive = catObj.isActive !== false;
 
                     return (
                       <div key={group.categoryName} className="border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-xs">
@@ -1748,27 +1754,25 @@ export default function BranchManager() {
                           </div>
 
                           <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                            {catObj && (
-                              <button
-                                type="button"
-                                onClick={() => toggleCategoryStatus(catObj)}
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                                  isCatActive
-                                    ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
-                                    : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100 shadow-2xs'
-                                }`}
-                                title={isCatActive ? "Category is LIVE on guest menu. Click to toggle OFF (Hide)" : "Category is HIDDEN from guest menu. Click to toggle ON (Show)"}
-                              >
-                                <span className={`w-6 h-3.5 flex items-center rounded-full p-0.5 transition-colors ${
-                                  isCatActive ? 'bg-emerald-500' : 'bg-neutral-300'
-                                }`}>
-                                  <span className={`bg-white w-2.5 h-2.5 rounded-full shadow-xs transform transition-transform ${
-                                    isCatActive ? 'translate-x-2.5' : 'translate-x-0'
-                                  }`} />
-                                </span>
-                                <span>{isCatActive ? 'Category ON' : 'Category OFF'}</span>
-                              </button>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => toggleCategoryStatus(catObj)}
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                                isCatActive
+                                  ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100 shadow-2xs'
+                                  : 'bg-rose-50 border-rose-300 text-rose-800 hover:bg-rose-100 shadow-2xs'
+                              }`}
+                              title={isCatActive ? "Category is LIVE on guest menu. Click to toggle OFF (Hide)" : "Category is HIDDEN from guest menu. Click to toggle ON (Show)"}
+                            >
+                              <span className={`w-6 h-3.5 flex items-center rounded-full p-0.5 transition-colors ${
+                                isCatActive ? 'bg-emerald-500' : 'bg-neutral-300'
+                              }`}>
+                                <span className={`bg-white w-2.5 h-2.5 rounded-full shadow-xs transform transition-transform ${
+                                  isCatActive ? 'translate-x-2.5' : 'translate-x-0'
+                                }`} />
+                              </span>
+                              <span>{isCatActive ? 'Category ON' : 'Category OFF'}</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => {

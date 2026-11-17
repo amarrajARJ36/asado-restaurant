@@ -162,6 +162,39 @@ export function clearPendingSyncItems(branchSlug: string) {
   } catch {}
 }
 
+export function getPendingSyncCategories(branchSlug: string): SyncedCategory[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(`asado_pending_sync_cats_${branchSlug}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function addPendingSyncCategory(branchSlug: string, cat: SyncedCategory) {
+  if (typeof window === 'undefined') return;
+  try {
+    const pending = getPendingSyncCategories(branchSlug);
+    const existingIdx = pending.findIndex(p => p.id === cat.id || (p.name && cat.name && p.name.trim().toLowerCase() === cat.name.trim().toLowerCase()));
+    if (existingIdx >= 0) {
+      pending[existingIdx] = cat;
+    } else {
+      pending.push(cat);
+    }
+    localStorage.setItem(`asado_pending_sync_cats_${branchSlug}`, JSON.stringify(pending));
+  } catch {}
+}
+
+export function clearPendingSyncCategories(branchSlug: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(`asado_pending_sync_cats_${branchSlug}`);
+  } catch {}
+}
+
 function rowToMenuItem(row: any): SyncedMenuItem {
   return {
     id: row.id,
@@ -278,7 +311,21 @@ export function useMenuSync(branchSlug: string | undefined) {
       }
 
       // When Supabase succeeds:
-      let fetchedCats = (catRes.data || []).map(rowToCategory);
+      const cachedData = getLocalCache(safeSlug);
+      const localCatMap = new Map((cachedData?.categories || categoriesRef.current || []).map(c => [c.id, c]));
+
+      let fetchedCats = (catRes.data || []).map((row: any) => {
+        const cat = rowToCategory(row);
+        // If Supabase table does not yet have is_active column (or value is null/undefined),
+        // preserve the user's local active state!
+        if (row.is_active === undefined || row.is_active === null) {
+          const local = localCatMap.get(cat.id);
+          if (local && local.isActive !== undefined) {
+            cat.isActive = local.isActive;
+          }
+        }
+        return cat;
+      });
       let fetchedItems = (itemRes.data || []).map(rowToMenuItem);
 
       // Re-apply and push any offline pending edits that were saved while Supabase was paused
@@ -293,6 +340,33 @@ export function useMenuSync(branchSlug: string | undefined) {
           console.log(`Synced ${pendingItems.length} offline edits to Supabase!`);
         } catch (syncErr) {
           console.warn('Failed to sync pending items to Supabase:', syncErr);
+        }
+      }
+
+      // Re-apply and push any offline pending category edits
+      const pendingCats = getPendingSyncCategories(safeSlug);
+      if (pendingCats.length > 0) {
+        const pendingCatMap = new Map(pendingCats.map(c => [c.id, c]));
+        fetchedCats = fetchedCats.map(c => pendingCatMap.has(c.id) ? { ...c, ...pendingCatMap.get(c.id)! } : c);
+
+        try {
+          await Promise.all(pendingCats.map(c => {
+            const payload: any = {
+              id: c.id,
+              branch_slug: safeSlug,
+              name: c.name,
+              image_url: c.imageUrl || c.image || null,
+              order_num: typeof c.order === 'number' ? c.order : 0
+            };
+            if (c.isActive !== undefined) {
+              payload.is_active = c.isActive;
+            }
+            return supabase.from('categories').upsert(payload);
+          }));
+          clearPendingSyncCategories(safeSlug);
+          console.log(`Synced ${pendingCats.length} offline category edits to Supabase!`);
+        } catch (syncErr) {
+          console.warn('Failed to sync pending categories to Supabase:', syncErr);
         }
       }
 
@@ -353,8 +427,46 @@ export function useMenuSync(branchSlug: string | undefined) {
         .subscribe();
     }
 
+    // Cross-tab / cross-component sync listener for instant response
+    const handleSyncEvent = (e: any) => {
+      if (!isMounted) return;
+      if (e.detail?.branchSlug === safeSlug) {
+        if (e.detail.category) {
+          const updatedCat = e.detail.category;
+          setCategories(prev => {
+            const idx = prev.findIndex(c => c.id === updatedCat.id || (c.name && updatedCat.name && c.name.trim().toLowerCase() === updatedCat.name.trim().toLowerCase()));
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = { ...copy[idx], ...updatedCat };
+              return copy;
+            }
+            return [...prev, updatedCat];
+          });
+        }
+        if (e.detail.item) {
+          const updatedItem = e.detail.item;
+          setItems(prev => {
+            const idx = prev.findIndex(i => i.id === updatedItem.id);
+            if (idx >= 0) {
+              const copy = [...prev];
+              copy[idx] = { ...copy[idx], ...updatedItem };
+              return copy;
+            }
+            return [...prev, updatedItem];
+          });
+        }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('asado-sync-update', handleSyncEvent);
+    }
+
     return () => {
       isMounted = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('asado-sync-update', handleSyncEvent);
+      }
       if (channel) {
         supabase.removeChannel(channel);
       }
@@ -547,13 +659,14 @@ export function useMenuSync(branchSlug: string | undefined) {
   // Save / Update Category
   const saveCategory = useCallback(async (category: SyncedCategory) => {
     const currentCats = categoriesRef.current;
-    const idx = currentCats.findIndex(c => c.id === category.id);
+    const idx = currentCats.findIndex(c => c.id === category.id || (c.name && category.name && c.name.trim().toLowerCase() === category.name.trim().toLowerCase()));
     let updated: SyncedCategory[];
+    const categoryWithSlug: SyncedCategory = { ...category, branchSlug: safeSlug };
     if (idx >= 0) {
       updated = [...currentCats];
-      updated[idx] = { ...updated[idx], ...category, branchSlug: safeSlug };
+      updated[idx] = { ...updated[idx], ...categoryWithSlug };
     } else {
-      updated = [...currentCats, { ...category, branchSlug: safeSlug }];
+      updated = [...currentCats, categoryWithSlug];
     }
 
     const nextVer = versionRef.current + 1;
@@ -566,8 +679,11 @@ export function useMenuSync(branchSlug: string | undefined) {
     });
 
     if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('asado-sync-update', { detail: { branchSlug: safeSlug, category } }));
+      window.dispatchEvent(new CustomEvent('asado-sync-update', { detail: { branchSlug: safeSlug, category: categoryWithSlug } }));
     }
+
+    // Proactively queue in local pending sync queue for resilience
+    addPendingSyncCategory(safeSlug, categoryWithSlug);
 
     try {
       const payload: any = {
@@ -575,7 +691,7 @@ export function useMenuSync(branchSlug: string | undefined) {
         branch_slug: safeSlug,
         name: category.name,
         image_url: category.imageUrl || category.image || null,
-        order_num: category.order || (idx >= 0 ? idx : updated.length)
+        order_num: typeof category.order === 'number' ? category.order : (idx >= 0 ? idx : updated.length)
       };
       if (category.isActive !== undefined) {
         payload.is_active = category.isActive;
@@ -586,11 +702,17 @@ export function useMenuSync(branchSlug: string | undefined) {
           delete payload.is_active;
           await supabase.from('categories').upsert(payload);
         } else {
-          console.warn('Supabase saveCategory warning (saved locally):', error.message);
+          console.warn('Supabase saveCategory warning (kept in local sync queue):', error.message);
         }
+      } else {
+        // Successfully upserted, remove from pending sync
+        try {
+          const remaining = getPendingSyncCategories(safeSlug).filter(p => p.id !== category.id);
+          localStorage.setItem(`asado_pending_sync_cats_${safeSlug}`, JSON.stringify(remaining));
+        } catch {}
       }
     } catch (err: any) {
-      console.warn('Failed to save category to Supabase (saved locally):', err?.message || err);
+      console.warn('Failed to save category to Supabase (kept in local sync queue):', err?.message || err);
     }
   }, [safeSlug]);
 

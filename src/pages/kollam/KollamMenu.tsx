@@ -27,12 +27,16 @@ export default function KollamMenu() {
   }, [kollamCategories]);
 
   const activeCategoryNames = useMemo(() => {
-    return new Set(activeKollamCategories.map(c => c.name));
+    return new Set(activeKollamCategories.map(c => (c.name || '').trim().toLowerCase()));
   }, [activeKollamCategories]);
 
   // Customer guest menu only shows available (not sold out) dishes from active categories
   const kollamMenu = useMemo(() => {
-    return rawKollamMenu.filter(item => item.isAvailable !== false && (!item.category || activeCategoryNames.has(item.category)));
+    return rawKollamMenu.filter(item => {
+      if (item.isAvailable === false) return false;
+      if (!item.category) return true;
+      return activeCategoryNames.has(item.category.trim().toLowerCase());
+    });
   }, [rawKollamMenu, activeCategoryNames]);
 
   const { banners } = useBanners('kollam');
@@ -45,7 +49,7 @@ export default function KollamMenu() {
   }, []);
   
   // To handle the sliding panel state
-  const activeCategory = activeKollamCategories.find(c => c.name === activeCategoryName) || activeKollamCategories.find(c => c.id === activeCategoryName);
+  const activeCategory = activeKollamCategories.find(c => (c.name || '').trim().toLowerCase() === (activeCategoryName || '').trim().toLowerCase()) || activeKollamCategories.find(c => c.id === activeCategoryName);
   const isSearchActive = searchQuery.length > 0;
 
   // If search is active, we might want to show items instead of categories
@@ -61,7 +65,7 @@ export default function KollamMenu() {
   const categoryItems = useMemo(() => {
     if (!activeCategoryName) return [];
     return kollamMenu
-      .filter(item => item.category === activeCategoryName)
+      .filter(item => (item.category || '').trim().toLowerCase() === (activeCategoryName || '').trim().toLowerCase())
       .sort((a, b) => {
         const orderA = typeof a.order === 'number' ? a.order : 9999;
         const orderB = typeof b.order === 'number' ? b.order : 9999;
@@ -245,7 +249,7 @@ export default function KollamMenu() {
             {/* CATEGORY TILES (IMAGE CARDS) */}
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {activeKollamCategories.map((category, index) => {
-                const itemCount = kollamMenu.filter(m => m.category === category.name).length;
+                const itemCount = kollamMenu.filter(m => (m.category || '').trim().toLowerCase() === category.name.trim().toLowerCase()).length;
                 return (
                   <CategoryTile
                     key={category.id}
